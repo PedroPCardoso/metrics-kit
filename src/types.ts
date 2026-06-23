@@ -16,6 +16,15 @@ export interface GroupedTrendsResult {
   };
 }
 
+/** A metric plus its variation against a prior period. */
+export interface VariationResult {
+  count: number;
+  variation: {
+    type: 'none' | 'increase' | 'decrease';
+    value: number | string;
+  };
+}
+
 /** Per-call configuration for a metrics query. */
 export interface MetricsOptions {
   /** BCP-47 locale used to translate period labels. Defaults to `en`. */

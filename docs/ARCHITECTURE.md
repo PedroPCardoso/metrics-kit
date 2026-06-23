@@ -291,9 +291,10 @@ type GroupedTrendsResult = {
   labels: (string | number)[];
   data: { total: number[]; [group: string]: number[] };
 };
+// Normalized discriminated shape (see DIVERGENCES.md §6).
 type VariationResult = {
   count: number;
-  variation: {} | { type: 'increase' | 'decrease'; value: number | string };
+  variation: { type: 'none' | 'increase' | 'decrease'; value: number | string };
 };
 ```
 

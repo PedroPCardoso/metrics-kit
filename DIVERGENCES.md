@@ -53,7 +53,21 @@ date periods (day/week/month/year): data in January and March yields
 series it uses the distinct column values (or an explicit label set). The
 result is deterministic and independent of the current date.
 
-## 6. Private `windowCount` and `dateColumnRef` fields
+## 6. `metricsWithVariations` shape and percent sign
+
+Two deliberate changes versus the original:
+
+- **Normalized "no change" shape.** The original returns an empty `variation`
+  object (`[]`) when current equals prior. This port always returns a
+  discriminated shape: `{ type: 'none' | 'increase' | 'decrease', value }`,
+  with `{ type: 'none', value: 0 }` for no change.
+- **Percent keeps the increase/decrease sign.** In the original, percent mode
+  reassigns the value to a positive `"N%"` string *before* the sign test, so a
+  decrease is always misreported as an increase. This port determines the
+  type from the signed difference first, then formats the magnitude (as a
+  percentage when requested), so decreases stay decreases.
+
+## 7. Private `windowCount` and `dateColumnRef` fields
 
 The original has both a `$count` property (the period window size) and a
 `count()` method (the COUNT aggregate); PHP keeps these in separate namespaces.

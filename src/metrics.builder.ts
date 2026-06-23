@@ -1,6 +1,9 @@
+import { DateTime } from 'luxon';
 import { ObjectLiteral, SelectQueryBuilder } from 'typeorm';
 import { Aggregate } from './enums/aggregate.enum';
 import { Period } from './enums/period.enum';
+import { InvalidPeriodException } from './exceptions/invalid-period.exception';
+import { InvalidVariationsCountException } from './exceptions/invalid-variations-count.exception';
 import { dialectFor } from './dialects/dialect.factory';
 import { DatePart, SqlDialect } from './dialects/sql-dialect.interface';
 import { PeriodResolver } from './dates/period-resolver';
@@ -13,7 +16,7 @@ import {
   toPercent,
 } from './formatting/trends.formatter';
 import { gapFillRaw, populate, presentIntegerLabels } from './formatting/missing-data';
-import { GroupedTrendsResult, MetricsOptions, TrendsResult } from './types';
+import { GroupedTrendsResult, MetricsOptions, TrendsResult, VariationResult } from './types';
 
 const DEFAULT_LOCALE = 'en';
 
@@ -67,6 +70,20 @@ export class MetricsBuilder<T extends ObjectLiteral> {
    */
   private qualify(column: string): string {
     return `${this.tableName}.${column}`;
+  }
+
+  /**
+   * A fresh builder over a clone of the query, carrying the aggregate/column
+   * state needed for a bare metric. Single place to copy metric-affecting
+   * state (extend here when adding new aggregate-relevant fields, e.g. timezone).
+   */
+  private baseClone(): MetricsBuilder<T> {
+    const clone = new MetricsBuilder<T>(this.qb.clone(), { locale: this.locale });
+    clone.aggregateFn = this.aggregateFn;
+    clone.column = this.column;
+    clone.dateColumnRef = this.dateColumnRef;
+    clone.tableName = this.tableName;
+    return clone;
   }
 
   static query<T extends ObjectLiteral>(
@@ -365,6 +382,44 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return data === null || data === undefined ? 0 : Number(data);
   }
 
+  /**
+   * Generate the current metric plus its variation against the period
+   * `previousCount` units ago.
+   */
+  async metricsWithVariations(
+    previousCount: number,
+    previousPeriod: Period,
+    inPercent = false,
+  ): Promise<VariationResult> {
+    if (!VARIATION_PERIODS.includes(previousPeriod)) {
+      throw new InvalidPeriodException(previousPeriod);
+    }
+    if (previousCount <= 0) {
+      throw new InvalidVariationsCountException();
+    }
+
+    const previous = this.baseClone();
+    previous.period = previousPeriod;
+    previous.windowCount = previousCount;
+    shiftReference(previous, previousPeriod, previousCount);
+
+    const count = await this.metrics();
+    const prior = await previous.metrics();
+
+    const diff = count - prior;
+    const type = diff > 0 ? 'increase' : diff < 0 ? 'decrease' : 'none';
+
+    let value: number | string = Math.abs(diff);
+    if (type !== 'none' && inPercent && prior > 0) {
+      value = `${Math.round((Math.abs(diff) / prior) * 100 * 100) / 100}%`;
+    }
+    if (type === 'none') {
+      value = 0;
+    }
+
+    return { count, variation: { type, value } };
+  }
+
   /** Generate a chart-ready time series. Empty when there is no data. */
   async trends(inPercent = false): Promise<TrendsResult | GroupedTrendsResult> {
     if (this.groupedLabels.length > 0) {
@@ -575,6 +630,31 @@ function today(): string {
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${d.getFullYear()}-${month}-${day}`;
+}
+
+const VARIATION_PERIODS: Period[] = [Period.DAY, Period.WEEK, Period.MONTH, Period.YEAR];
+
+/** Pin a builder's reference point to `count` periods before now. */
+function shiftReference<T extends ObjectLiteral>(
+  builder: MetricsBuilder<T>,
+  period: Period,
+  count: number,
+): void {
+  const ago = DateTime.now();
+  switch (period) {
+    case Period.DAY:
+      builder.forDay(ago.minus({ days: count }).day);
+      break;
+    case Period.WEEK:
+      builder.forWeek(ago.minus({ weeks: count }).weekNumber);
+      break;
+    case Period.MONTH:
+      builder.forMonth(ago.minus({ months: count }).month);
+      break;
+    case Period.YEAR:
+      builder.forYear(ago.minus({ years: count }).year);
+      break;
+  }
 }
 
 /** ISO-8601 week number for a JS Date (matches Luxon/Postgres/MySQL/SQLite). */
