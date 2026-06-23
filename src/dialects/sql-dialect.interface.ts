@@ -20,4 +20,10 @@ export interface SqlDialect {
    * Used to bucket `between` ranges.
    */
   dateBucket(part: DatePart, column: string): string;
+
+  /**
+   * Convert a UTC date column to the given timezone (a bound parameter
+   * placeholder, e.g. `:nm_tz`), so date parts are extracted in local time.
+   */
+  convertTz(column: string, tzParam: string): string;
 }

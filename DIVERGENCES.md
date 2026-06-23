@@ -80,7 +80,20 @@ identifiers, so this closes an injection vector the original left open.
 taken from end-user input. The allowlist is a safety net, not a license to pass
 untrusted column names.
 
-## 8. Private `windowCount` and `dateColumnRef` fields
+## 8. Timezone-aware bucketing (new capability)
+
+The original ignores timezone — date parts are extracted in whatever zone the
+database session happens to use. This port adds an explicit `timezone` option
+(IANA name, default `UTC`), converting the date column before bucketing:
+Postgres `AT TIME ZONE`, MySQL `CONVERT_TZ`, and a DST-correct Luxon function on
+SQLite. With the default `UTC` the behaviour is unchanged (no conversion).
+
+**Operational requirement:** on MySQL, `CONVERT_TZ` returns NULL silently unless
+the named timezone tables are loaded (`mysql_tzinfo_to_sql /usr/share/zoneinfo |
+mysql mysql`). A NULL bucket drops the row from the result, so load the tables
+in any environment that uses a non-UTC timezone on MySQL.
+
+## 9. Private `windowCount` and `dateColumnRef` fields
 
 The original has both a `$count` property (the period window size) and a
 `count()` method (the COUNT aggregate); PHP keeps these in separate namespaces.

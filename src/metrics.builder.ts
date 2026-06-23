@@ -4,7 +4,8 @@ import { Aggregate } from './enums/aggregate.enum';
 import { Period } from './enums/period.enum';
 import { InvalidPeriodException } from './exceptions/invalid-period.exception';
 import { InvalidVariationsCountException } from './exceptions/invalid-variations-count.exception';
-import { assertAggregate, assertDateFormat, assertSafeIdentifier } from './validation';
+import { assertAggregate, assertDateFormat, assertSafeIdentifier, assertTimezone } from './validation';
+import { registerSqliteTz } from './dates/sqlite-tz';
 import { dialectFor } from './dialects/dialect.factory';
 import { DatePart, SqlDialect } from './dialects/sql-dialect.interface';
 import { PeriodResolver } from './dates/period-resolver';
@@ -20,6 +21,7 @@ import { gapFillRaw, populate, presentIntegerLabels } from './formatting/missing
 import { GroupedTrendsResult, MetricsOptions, TrendsResult, VariationResult } from './types';
 
 const DEFAULT_LOCALE = 'en';
+const DEFAULT_TIMEZONE = 'UTC';
 
 /**
  * Fluent builder that turns a TypeORM SelectQueryBuilder into chart-ready
@@ -30,6 +32,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   private tableName: string;
   private readonly dialect: SqlDialect;
   private readonly locale: string;
+  private readonly timezone: string;
   private aggregateFn: Aggregate = Aggregate.COUNT;
   private column: string;
   private dateColumnRef: string;
@@ -60,6 +63,8 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     this.tableName = qb.alias;
     this.dialect = dialectFor(qb.connection.options.type);
     this.locale = options.locale ?? DEFAULT_LOCALE;
+    this.timezone = options.timezone ?? DEFAULT_TIMEZONE;
+    assertTimezone(this.timezone);
     this.column = this.qualify('id');
     this.dateColumnRef = this.qualify('created_at');
   }
@@ -85,7 +90,10 @@ export class MetricsBuilder<T extends ObjectLiteral> {
    * state (extend here when adding new aggregate-relevant fields, e.g. timezone).
    */
   private baseClone(): MetricsBuilder<T> {
-    const clone = new MetricsBuilder<T>(this.qb.clone(), { locale: this.locale });
+    const clone = new MetricsBuilder<T>(this.qb.clone(), {
+      locale: this.locale,
+      timezone: this.timezone,
+    });
     clone.aggregateFn = this.aggregateFn;
     clone.column = this.column;
     clone.dateColumnRef = this.dateColumnRef;
@@ -387,6 +395,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     const qb = this.qb.clone();
     qb.select(this.dialect.aggregate(this.aggregateFn, this.column), 'data');
     this.applyFilters(qb);
+    this.prepareTz(qb);
 
     const raw = await qb.getRawOne<{ data: unknown }>();
     const data = raw?.data;
@@ -524,6 +533,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
       .orderBy('label', 'ASC');
     this.applyGroupedData(qb);
     this.applyFilters(qb);
+    this.prepareTz(qb);
 
     return qb.getRawMany<RawTrendRow>();
   }
@@ -549,19 +559,42 @@ export class MetricsBuilder<T extends ObjectLiteral> {
       return this.labelColumnName;
     }
     if (this.range) {
-      return this.dialect.dateBucket(this.groupBy, this.dateColumnRef);
+      return this.dialect.dateBucket(this.groupBy, this.dateExpr());
     }
     if (this.period) {
-      return this.dialect.periodExpr(this.period as DatePart, this.dateColumnRef);
+      return this.dialect.periodExpr(this.period as DatePart, this.dateExpr());
     }
-    return this.dateColumnRef;
+    return this.dateExpr();
+  }
+
+  /**
+   * The date-column SQL expression, timezone-converted when a non-UTC timezone
+   * is configured so that date parts are extracted in local time.
+   */
+  private dateExpr(): string {
+    if (this.timezone === DEFAULT_TIMEZONE) {
+      return this.dateColumnRef;
+    }
+    return this.dialect.convertTz(this.dateColumnRef, ':nm_tz');
+  }
+
+  /** Bind the timezone parameter / register the SQLite tz function when needed. */
+  private prepareTz(qb: SelectQueryBuilder<T>): void {
+    if (this.timezone === DEFAULT_TIMEZONE) {
+      return;
+    }
+    qb.setParameter('nm_tz', this.timezone);
+    const driver = this.qb.connection.driver as { databaseConnection?: unknown };
+    if (this.qb.connection.options.type === 'better-sqlite3' && driver.databaseConnection) {
+      registerSqliteTz(driver.databaseConnection as Parameters<typeof registerSqliteTz>[0]);
+    }
   }
 
   /** Apply the WHERE clauses that scope the query to the configured period/range. */
   private applyFilters(qb: SelectQueryBuilder<T>): void {
     if (this.range) {
       qb.andWhere(
-        `${this.dialect.dateBucket('day', this.dateColumnRef)} BETWEEN :nm_start AND :nm_end`,
+        `${this.dialect.dateBucket('day', this.dateExpr())} BETWEEN :nm_start AND :nm_end`,
         { nm_start: this.range.start, nm_end: this.range.end },
       );
       return;
@@ -602,7 +635,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
 
   private whereEquals(qb: SelectQueryBuilder<T>, part: DatePart, value: number): void {
     const key = `nm_${part}`;
-    qb.andWhere(`${this.dialect.periodExpr(part, this.dateColumnRef)} = :${key}`, { [key]: value });
+    qb.andWhere(`${this.dialect.periodExpr(part, this.dateExpr())} = :${key}`, { [key]: value });
   }
 
   private whereBetween(
@@ -612,7 +645,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   ): void {
     const lo = `nm_${part}_lo`;
     const hi = `nm_${part}_hi`;
-    qb.andWhere(`${this.dialect.periodExpr(part, this.dateColumnRef)} BETWEEN :${lo} AND :${hi}`, {
+    qb.andWhere(`${this.dialect.periodExpr(part, this.dateExpr())} BETWEEN :${lo} AND :${hi}`, {
       [lo]: start,
       [hi]: end,
     });

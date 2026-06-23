@@ -29,4 +29,6 @@ export interface VariationResult {
 export interface MetricsOptions {
   /** BCP-47 locale used to translate period labels. Defaults to `en`. */
   locale?: string;
+  /** IANA timezone the date column is bucketed in. Defaults to `UTC`. */
+  timezone?: string;
 }

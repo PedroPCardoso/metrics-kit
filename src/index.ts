@@ -13,3 +13,4 @@ export { InvalidVariationsCountException } from './exceptions/invalid-variations
 export { InvalidAggregateException } from './exceptions/invalid-aggregate.exception';
 export { InvalidDateFormatException } from './exceptions/invalid-date-format.exception';
 export { InvalidIdentifierException } from './exceptions/invalid-identifier.exception';
+export { InvalidTimezoneException } from './exceptions/invalid-timezone.exception';

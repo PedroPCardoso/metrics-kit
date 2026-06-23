@@ -32,4 +32,8 @@ export class MySqlDialect implements SqlDialect {
         return `date_format(${column}, '%x-W%v')`;
     }
   }
+
+  convertTz(column: string, tzParam: string): string {
+    return `CONVERT_TZ(${column}, 'UTC', ${tzParam})`;
+  }
 }

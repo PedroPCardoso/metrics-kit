@@ -36,4 +36,10 @@ export class SqliteDialect implements SqlDialect {
       }
     }
   }
+
+  convertTz(column: string, tzParam: string): string {
+    // SQLite has no native timezone support; nm_tz_local is a Luxon-backed
+    // user function registered on the connection (DST-correct).
+    return `nm_tz_local(${column}, ${tzParam})`;
+  }
 }

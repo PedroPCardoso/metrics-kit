@@ -45,12 +45,11 @@ services:
 
   mysql:
     image: mysql:8
-    # TIMEZONE HOOK (#10): MySQL CONVERT_TZ() needs the named timezone tables
-    # loaded, or it returns NULL silently (see docs/ARCHITECTURE.md §6.8).
-    # They are NOT loaded yet — the timezone-aware bucketing slice (#10) will
-    # provision them, e.g. via an init script in /docker-entrypoint-initdb.d
-    # running `mysql_tzinfo_to_sql /usr/share/zoneinfo | mysql mysql`.
-    # Until then, only offset-based / UTC behaviour is exercised.
+    # MySQL CONVERT_TZ() needs the named timezone tables loaded, or it returns
+    # NULL silently (see docs/ARCHITECTURE.md §6.8). The init script loads them
+    # on a fresh data directory; CI also loads them explicitly as a safety net.
+    volumes:
+      - ./docker/mysql-init:/docker-entrypoint-initdb.d:ro
     environment:
       - MYSQL_ROOT_PASSWORD=root
       - MYSQL_USER=metrics

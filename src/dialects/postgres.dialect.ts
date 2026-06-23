@@ -32,4 +32,8 @@ export class PostgresDialect implements SqlDialect {
         return `to_char(${column}, 'IYYY-"W"IW')`;
     }
   }
+
+  convertTz(column: string, tzParam: string): string {
+    return `((${column}) AT TIME ZONE 'UTC' AT TIME ZONE ${tzParam})`;
+  }
 }

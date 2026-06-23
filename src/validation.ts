@@ -1,7 +1,9 @@
+import { IANAZone } from 'luxon';
 import { Aggregate } from './enums/aggregate.enum';
 import { InvalidAggregateException } from './exceptions/invalid-aggregate.exception';
 import { InvalidDateFormatException } from './exceptions/invalid-date-format.exception';
 import { InvalidIdentifierException } from './exceptions/invalid-identifier.exception';
+import { InvalidTimezoneException } from './exceptions/invalid-timezone.exception';
 
 const IDENTIFIER = /^[a-zA-Z_][a-zA-Z0-9_.]*$/;
 const DATE_FORMAT = /^\d{4}-\d{2}-\d{2}$/;
@@ -27,5 +29,11 @@ export function assertDateFormat(value: string): void {
 export function assertAggregate(aggregate: Aggregate): void {
   if (!AGGREGATES.includes(aggregate)) {
     throw new InvalidAggregateException(aggregate);
+  }
+}
+
+export function assertTimezone(timezone: string): void {
+  if (timezone !== 'UTC' && !IANAZone.isValidZone(timezone)) {
+    throw new InvalidTimezoneException(timezone);
   }
 }
