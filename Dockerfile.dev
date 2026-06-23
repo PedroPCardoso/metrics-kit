@@ -1,0 +1,13 @@
+# Development image: install deps, typecheck, test and build inside Docker.
+FROM node:20-bookworm-slim
+
+# Toolchain needed to compile native deps (better-sqlite3).
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# node_modules lives in the image layer / a named volume, not the host bind mount,
+# so native builds match the container platform.
+ENV CI=true

@@ -1,0 +1,21 @@
+# All dev tasks run inside Docker. Usage:
+#   docker compose run --rm dev npm install
+#   docker compose run --rm dev npm test
+#   docker compose run --rm dev npm run typecheck
+#   docker compose run --rm dev npm run build
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    working_dir: /app
+    volumes:
+      - .:/app
+      # Keep node_modules in a container-managed volume so native deps
+      # (better-sqlite3) are built for the container, not the host.
+      - node_modules:/app/node_modules
+    environment:
+      - CI=true
+
+volumes:
+  node_modules:

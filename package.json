@@ -1,0 +1,48 @@
+{
+  "name": "nestjs-metrics",
+  "version": "0.1.0",
+  "description": "Generate metrics and trends data from your TypeORM entities for your dashboards.",
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint \"{src,test}/**/*.ts\""
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^10 || ^11",
+    "typeorm": "^0.3"
+  },
+  "peerDependenciesMeta": {
+    "@nestjs/common": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@nestjs/common": "^10",
+    "@types/node": "^20",
+    "@typescript-eslint/eslint-plugin": "^7",
+    "@typescript-eslint/parser": "^7",
+    "better-sqlite3": "^11",
+    "eslint": "^8",
+    "reflect-metadata": "^0.2",
+    "tsup": "^8",
+    "typeorm": "^0.3",
+    "typescript": "^5",
+    "vitest": "^2"
+  },
+  "sideEffects": false
+}
