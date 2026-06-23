@@ -11,7 +11,8 @@ export class MySqlDialect implements SqlDialect {
       case 'day':
         return `day(${column})`;
       case 'week':
-        return `week(${column})`;
+        // WEEKOFYEAR == WEEK(col, 3) == ISO-8601 week number.
+        return `WEEKOFYEAR(${column})`;
       case 'month':
         return `month(${column})`;
       case 'year':
