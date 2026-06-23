@@ -14,8 +14,14 @@ export interface OrderRow {
   id: number;
   status: string;
   amount: number;
+  customer_id: number | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface CustomerRow {
+  id: number;
+  name: string;
 }
 
 export const Order = new EntitySchema<OrderRow>({
@@ -25,9 +31,19 @@ export const Order = new EntitySchema<OrderRow>({
     id: { type: Number, primary: true, generated: true },
     status: { type: String, default: 'pending' },
     amount: { type: 'decimal', precision: 10, scale: 2, default: 0 },
+    customer_id: { type: Number, nullable: true },
     // `Date` lets TypeORM pick the dialect-appropriate timestamp column type.
     created_at: { type: Date, nullable: true },
     updated_at: { type: Date, nullable: true },
+  },
+});
+
+export const Customer = new EntitySchema<CustomerRow>({
+  name: 'Customer',
+  tableName: 'customers',
+  columns: {
+    id: { type: Number, primary: true },
+    name: { type: String },
   },
 });
 
@@ -35,8 +51,10 @@ export type TestDriver = 'better-sqlite3' | 'postgres' | 'mysql';
 
 export interface SeedOrder {
   createdAt: string;
+  updatedAt?: string;
   status?: string;
   amount?: number;
+  customerId?: number;
 }
 
 /**
@@ -55,7 +73,7 @@ export function allTestDrivers(): TestDriver[] {
 }
 
 function optionsFor(driver: TestDriver): DataSourceOptions {
-  const base = { entities: [Order], synchronize: true };
+  const base = { entities: [Order, Customer], synchronize: true };
 
   switch (driver) {
     case 'postgres':
@@ -94,6 +112,7 @@ export async function createOrdersDataSource(
 /** Remove all rows so each test starts from a clean table. */
 export async function resetOrders(dataSource: DataSource): Promise<void> {
   await dataSource.getRepository(Order).clear();
+  await dataSource.getRepository(Customer).clear();
 }
 
 export async function seedOrders(
@@ -105,14 +124,32 @@ export async function seedOrders(
     rows.map((row) => ({
       status: row.status ?? 'pending',
       amount: row.amount ?? 100,
+      customer_id: row.customerId ?? null,
       created_at: row.createdAt,
-      updated_at: row.createdAt,
+      updated_at: row.updatedAt ?? row.createdAt,
     })),
   );
+}
+
+export async function seedCustomers(
+  dataSource: DataSource,
+  rows: CustomerRow[],
+): Promise<void> {
+  await dataSource.getRepository(Customer).insert(rows);
 }
 
 export function ordersQuery(
   dataSource: DataSource,
 ): SelectQueryBuilder<OrderRow> {
   return dataSource.getRepository(Order).createQueryBuilder('orders');
+}
+
+/** Orders inner-joined to customers (alias `customers`), for table() tests. */
+export function ordersJoinCustomers(
+  dataSource: DataSource,
+): SelectQueryBuilder<OrderRow> {
+  return dataSource
+    .getRepository(Order)
+    .createQueryBuilder('orders')
+    .innerJoin('customers', 'customers', 'customers.id = orders.customer_id');
 }

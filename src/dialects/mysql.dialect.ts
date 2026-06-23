@@ -19,4 +19,17 @@ export class MySqlDialect implements SqlDialect {
         return `year(${column})`;
     }
   }
+
+  dateBucket(part: DatePart, column: string): string {
+    switch (part) {
+      case 'day':
+        return `date_format(${column}, '%Y-%m-%d')`;
+      case 'month':
+        return `date_format(${column}, '%Y-%m')`;
+      case 'year':
+        return `date_format(${column}, '%Y')`;
+      case 'week':
+        return `date_format(${column}, '%x-W%v')`;
+    }
+  }
 }

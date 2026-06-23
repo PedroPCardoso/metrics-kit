@@ -13,4 +13,11 @@ export interface SqlDialect {
 
   /** Integer extraction of a date part, e.g. the month number of a column. */
   periodExpr(part: DatePart, column: string): string;
+
+  /**
+   * Truncate a date column to a granularity, as a sortable string label:
+   * day → `YYYY-MM-DD`, month → `YYYY-MM`, year → `YYYY`, week → `IYYY-Www`.
+   * Used to bucket `between` ranges.
+   */
+  dateBucket(part: DatePart, column: string): string;
 }

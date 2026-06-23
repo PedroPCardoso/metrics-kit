@@ -16,15 +16,21 @@ const DEFAULT_LOCALE = 'en';
  * (metrics, trends) execute against the database and are async.
  */
 export class MetricsBuilder<T extends ObjectLiteral> {
-  private readonly table: string;
+  private tableName: string;
   private readonly dialect: SqlDialect;
   private readonly locale: string;
   private aggregateFn: Aggregate = Aggregate.COUNT;
   private column: string;
-  private dateColumn: string;
+  private dateColumnRef: string;
   private period: Period | null = null;
   /** Window size for the period (0 = whole period). Named to avoid colliding with the count() aggregate method. */
   private windowCount = 0;
+  /** Explicit date range (set by between/from); takes precedence over period. */
+  private range: { start: string; end: string } | null = null;
+  /** Granularity used to bucket a date range. */
+  private groupBy: DatePart = 'day';
+  /** Categorical column to group by instead of a date period. */
+  private labelColumnName: string | null = null;
   private now = new Date();
   private year: number = this.now.getFullYear();
   private month: number = this.now.getMonth() + 1;
@@ -35,11 +41,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     private readonly qb: SelectQueryBuilder<T>,
     options: MetricsOptions = {},
   ) {
-    this.table = qb.alias;
+    this.tableName = qb.alias;
     this.dialect = dialectFor(qb.connection.options.type);
     this.locale = options.locale ?? DEFAULT_LOCALE;
     this.column = this.qualify('id');
-    this.dateColumn = this.qualify('created_at');
+    this.dateColumnRef = this.qualify('created_at');
   }
 
   /**
@@ -48,7 +54,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
    * consumer-supplied identifier passes through exactly one place.
    */
   private qualify(column: string): string {
-    return `${this.table}.${column}`;
+    return `${this.tableName}.${column}`;
   }
 
   static query<T extends ObjectLiteral>(
@@ -68,6 +74,26 @@ export class MetricsBuilder<T extends ObjectLiteral> {
 
   count(column = 'id'): this {
     return this.aggregate(Aggregate.COUNT, column);
+  }
+
+  // --- Targeting ----------------------------------------------------------
+
+  /** Bucket by a date column other than `created_at`. */
+  dateColumn(column: string): this {
+    this.dateColumnRef = this.qualify(column);
+    return this;
+  }
+
+  /** Override the table used to qualify subsequent columns (e.g. a joined table). */
+  table(name: string): this {
+    this.tableName = name;
+    return this;
+  }
+
+  /** Group the series by a categorical column instead of by a date period. */
+  labelColumn(column: string): this {
+    this.labelColumnName = this.qualify(column);
+    return this;
   }
 
   sum(column: string): this {
@@ -108,6 +134,41 @@ export class MetricsBuilder<T extends ObjectLiteral> {
 
   byYear(count = 0): this {
     return this.by(Period.YEAR, count);
+  }
+
+  // --- Date ranges --------------------------------------------------------
+
+  between(start: string, end: string): this {
+    assertDateFormat(start);
+    assertDateFormat(end);
+    this.range = { start, end };
+    this.period = null;
+    return this;
+  }
+
+  from(date: string): this {
+    return this.between(date, today());
+  }
+
+  private setGroupBy(part: DatePart): this {
+    this.groupBy = part;
+    return this;
+  }
+
+  groupByDay(): this {
+    return this.setGroupBy('day');
+  }
+
+  groupByWeek(): this {
+    return this.setGroupBy('week');
+  }
+
+  groupByMonth(): this {
+    return this.setGroupBy('month');
+  }
+
+  groupByYear(): this {
+    return this.setGroupBy('year');
   }
 
   // --- Reference point pinning -------------------------------------------
@@ -214,13 +275,53 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return this.min(column).byYear(count);
   }
 
+  countBetween([start, end]: [string, string], column = 'id'): this {
+    return this.count(column).between(start, end);
+  }
+
+  sumBetween([start, end]: [string, string], column: string): this {
+    return this.sum(column).between(start, end);
+  }
+
+  averageBetween([start, end]: [string, string], column: string): this {
+    return this.average(column).between(start, end);
+  }
+
+  maxBetween([start, end]: [string, string], column: string): this {
+    return this.max(column).between(start, end);
+  }
+
+  minBetween([start, end]: [string, string], column: string): this {
+    return this.min(column).between(start, end);
+  }
+
+  countFrom(date: string, column = 'id'): this {
+    return this.count(column).from(date);
+  }
+
+  sumFrom(date: string, column: string): this {
+    return this.sum(column).from(date);
+  }
+
+  averageFrom(date: string, column: string): this {
+    return this.average(column).from(date);
+  }
+
+  maxFrom(date: string, column: string): this {
+    return this.max(column).from(date);
+  }
+
+  minFrom(date: string, column: string): this {
+    return this.min(column).from(date);
+  }
+
   // --- Terminals ----------------------------------------------------------
 
   /** Generate a single aggregate value. Returns 0 when there is no data. */
   async metrics(): Promise<number> {
     const qb = this.qb.clone();
     qb.select(this.dialect.aggregate(this.aggregateFn, this.column), 'data');
-    this.applyPeriod(qb);
+    this.applyFilters(qb);
 
     const raw = await qb.getRawOne<{ data: unknown }>();
     const data = raw?.data;
@@ -231,7 +332,10 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   async trends(inPercent = false): Promise<TrendsResult> {
     const rows = await this.trendsData();
     const formatter = new TrendsFormatter(new LabelFormatter(this.locale));
-    return formatter.format(rows, this.period, { year: this.year, month: this.month }, inPercent);
+    // Category (labelColumn) and range labels are already final strings; only
+    // a date period maps a raw bucket value to a translated label.
+    const labelPeriod = this.labelColumnName || this.range ? null : this.period;
+    return formatter.format(rows, labelPeriod, { year: this.year, month: this.month }, inPercent);
   }
 
   private async trendsData(): Promise<RawTrendRow[]> {
@@ -240,22 +344,34 @@ export class MetricsBuilder<T extends ObjectLiteral> {
       .addSelect(this.labelExpr(), 'label')
       .groupBy('label')
       .orderBy('label', 'ASC');
-    this.applyPeriod(qb);
+    this.applyFilters(qb);
 
     return qb.getRawMany<RawTrendRow>();
   }
 
-  /** The SQL expression used as the grouped trend label for the current period. */
+  /** The SQL expression used as the grouped trend label. */
   private labelExpr(): string {
-    const part = this.period as Exclude<Period, Period.TODAY> | null;
-    if (part === null) {
-      return this.dateColumn;
+    if (this.labelColumnName) {
+      return this.labelColumnName;
     }
-    return this.dialect.periodExpr(part as DatePart, this.dateColumn);
+    if (this.range) {
+      return this.dialect.dateBucket(this.groupBy, this.dateColumnRef);
+    }
+    if (this.period) {
+      return this.dialect.periodExpr(this.period as DatePart, this.dateColumnRef);
+    }
+    return this.dateColumnRef;
   }
 
-  /** Apply the WHERE clauses that scope the query to the configured period/window. */
-  private applyPeriod(qb: SelectQueryBuilder<T>): void {
+  /** Apply the WHERE clauses that scope the query to the configured period/range. */
+  private applyFilters(qb: SelectQueryBuilder<T>): void {
+    if (this.range) {
+      qb.andWhere(
+        `${this.dialect.dateBucket('day', this.dateColumnRef)} BETWEEN :nm_start AND :nm_end`,
+        { nm_start: this.range.start, nm_end: this.range.end },
+      );
+      return;
+    }
     switch (this.period) {
       case Period.DAY:
         this.whereEquals(qb, 'year', this.year);
@@ -292,7 +408,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
 
   private whereEquals(qb: SelectQueryBuilder<T>, part: DatePart, value: number): void {
     const key = `nm_${part}`;
-    qb.andWhere(`${this.dialect.periodExpr(part, this.dateColumn)} = :${key}`, { [key]: value });
+    qb.andWhere(`${this.dialect.periodExpr(part, this.dateColumnRef)} = :${key}`, { [key]: value });
   }
 
   private whereBetween(
@@ -302,7 +418,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   ): void {
     const lo = `nm_${part}_lo`;
     const hi = `nm_${part}_hi`;
-    qb.andWhere(`${this.dialect.periodExpr(part, this.dateColumn)} BETWEEN :${lo} AND :${hi}`, {
+    qb.andWhere(`${this.dialect.periodExpr(part, this.dateColumnRef)} BETWEEN :${lo} AND :${hi}`, {
       [lo]: start,
       [hi]: end,
     });
@@ -314,6 +430,23 @@ export class MetricsBuilder<T extends ObjectLiteral> {
       this.windowCount,
     );
   }
+}
+
+const DATE_FORMAT = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Validate a YYYY-MM-DD date string. (Typed exceptions arrive in #9.) */
+function assertDateFormat(value: string): void {
+  if (!DATE_FORMAT.test(value) || Number.isNaN(Date.parse(value))) {
+    throw new Error(`nestjs-metrics: invalid date "${value}", expected YYYY-MM-DD`);
+  }
+}
+
+function today(): string {
+  // Local date, matching the local-time basis used for the period reference.
+  const d = new Date();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${month}-${day}`;
 }
 
 /** ISO-8601 week number for a JS Date (matches Luxon/Postgres/MySQL/SQLite). */

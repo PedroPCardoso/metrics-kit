@@ -19,4 +19,17 @@ export class PostgresDialect implements SqlDialect {
         return `EXTRACT(YEAR FROM ${column})`;
     }
   }
+
+  dateBucket(part: DatePart, column: string): string {
+    switch (part) {
+      case 'day':
+        return `to_char(${column}, 'YYYY-MM-DD')`;
+      case 'month':
+        return `to_char(${column}, 'YYYY-MM')`;
+      case 'year':
+        return `to_char(${column}, 'YYYY')`;
+      case 'week':
+        return `to_char(${column}, 'IYYY-"W"IW')`;
+    }
+  }
 }
