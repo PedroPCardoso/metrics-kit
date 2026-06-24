@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DataSource as TypeOrmDataSource } from 'typeorm';
-import { MetricsBuilder } from '../src/metrics.builder';
-import { DataSource } from '../src/datasource';
-import { WhereInput } from '../src/where';
+import { MetricsBuilder } from '@core/metrics.builder';
+import { DataSource } from '@core/datasource';
+import { WhereInput } from '@core/where';
 import { createOrdersDataSource, resetOrders, seedOrders } from './helpers/orders-datasource';
 
 /**

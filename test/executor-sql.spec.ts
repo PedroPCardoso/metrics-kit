@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { MetricsBuilder } from '../src/metrics.builder';
-import { DataSource, Row, SupportedDialect } from '../src/datasource';
+import { MetricsBuilder } from '@core/metrics.builder';
+import { DataSource, Row, SupportedDialect } from '@core/datasource';
 
 /**
  * DB-free structural guard: pin the raw SQL + positional params the executor

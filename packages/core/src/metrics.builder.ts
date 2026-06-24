@@ -1,5 +1,5 @@
 import { DateTime } from 'luxon';
-import { ObjectLiteral, SelectQueryBuilder } from 'typeorm';
+import type { ObjectLiteral, SelectQueryBuilder } from 'typeorm';
 import { Aggregate } from './enums/aggregate.enum';
 import { Period } from './enums/period.enum';
 import { InvalidPeriodException } from './exceptions/invalid-period.exception';

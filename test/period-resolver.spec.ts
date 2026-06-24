@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DateTime } from 'luxon';
-import { PeriodResolver } from '../src/dates/period-resolver';
+import { PeriodResolver } from '@core/dates/period-resolver';
 
 /**
  * Pure unit tests for the window-bound math, with `now` injected so the

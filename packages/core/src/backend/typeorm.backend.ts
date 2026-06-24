@@ -1,4 +1,4 @@
-import { ObjectLiteral, SelectQueryBuilder } from 'typeorm';
+import type { ObjectLiteral, SelectQueryBuilder } from 'typeorm';
 import { Row } from '../datasource';
 import { registerSqliteTz } from '../dates/sqlite-tz';
 import { dialectFor } from '../dialects/dialect.factory';

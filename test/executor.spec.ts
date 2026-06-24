@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DataSource as TypeOrmDataSource } from 'typeorm';
-import { MetricsBuilder } from '../src/metrics.builder';
-import { DataSource } from '../src/datasource';
-import { SqliteTimezoneUnsupportedException } from '../src/exceptions/sqlite-timezone-unsupported.exception';
+import { MetricsBuilder } from '@core/metrics.builder';
+import { DataSource } from '@core/datasource';
+import { SqliteTimezoneUnsupportedException } from '@core/exceptions/sqlite-timezone-unsupported.exception';
 import {
   createOrdersDataSource,
   ordersQuery,

@@ -1,0 +1,58 @@
+{
+  "name": "@metrics-kit/nextjs",
+  "version": "0.1.0",
+  "description": "Metrics & trends for Next.js / any Node runtime, over Prisma or Drizzle.",
+  "keywords": ["nextjs", "prisma", "drizzle", "metrics", "trends", "dashboard", "analytics"],
+  "author": "Pedro Cardoso",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PedroPCardoso/nestjs-metrics.git",
+    "directory": "packages/nextjs"
+  },
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./prisma": {
+      "require": "./dist/prisma/index.js",
+      "types": "./dist/prisma/index.d.ts"
+    },
+    "./drizzle": {
+      "require": "./dist/drizzle/index.js",
+      "types": "./dist/drizzle/index.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "prisma", "drizzle"],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@metrics-kit/core": "^0.1.0"
+  },
+  "peerDependencies": {
+    "@prisma/client": "*",
+    "drizzle-orm": "*"
+  },
+  "peerDependenciesMeta": {
+    "@prisma/client": {
+      "optional": true
+    },
+    "drizzle-orm": {
+      "optional": true
+    }
+  }
+}
