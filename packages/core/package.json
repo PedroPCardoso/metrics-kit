@@ -1,0 +1,46 @@
+{
+  "name": "@metrics-kit/core",
+  "version": "0.1.0",
+  "description": "ORM-agnostic metrics & trends engine. Dual-mode: TypeORM query builder or a raw-SQL executor (Prisma/Drizzle/any driver).",
+  "keywords": ["metrics", "trends", "charts", "dashboard", "analytics", "sql"],
+  "author": "Pedro Cardoso",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PedroPCardoso/nestjs-metrics.git",
+    "directory": "packages/core"
+  },
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist"],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "luxon": "^3"
+  },
+  "peerDependencies": {
+    "typeorm": "^0.3"
+  },
+  "peerDependenciesMeta": {
+    "typeorm": {
+      "optional": true
+    }
+  }
+}

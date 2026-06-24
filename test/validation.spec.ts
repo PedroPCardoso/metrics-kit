@@ -8,7 +8,7 @@ import {
   InvalidVariationsCountException,
   Metrics,
   Period,
-} from '../src/index';
+} from '@metrics-kit/core';
 import { createOrdersDataSource, ordersQuery } from './helpers/orders-datasource';
 
 describe('input validation & identifier safety', () => {

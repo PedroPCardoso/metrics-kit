@@ -1,20 +1,18 @@
 {
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2021",
-    "module": "CommonJS",
-    "moduleResolution": "Node",
-    "lib": ["ES2021"],
-    "declaration": true,
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
-    "outDir": "dist",
-    "rootDir": ".",
-    "types": ["node"]
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@metrics-kit/core": ["packages/core/src/index.ts"],
+      "@metrics-kit/core/*": ["packages/core/src/*"],
+      "@metrics-kit/nestjs": ["packages/nestjs/src/index.ts"],
+      "@metrics-kit/nextjs": ["packages/nextjs/src/index.ts"],
+      "@metrics-kit/nextjs/prisma": ["packages/nextjs/src/prisma/index.ts"],
+      "@metrics-kit/nextjs/drizzle": ["packages/nextjs/src/drizzle/index.ts"],
+      "@core/*": ["packages/core/src/*"]
+    }
   },
-  "include": ["src", "test"],
-  "exclude": ["node_modules", "dist", "laravel-metrics"]
+  "include": ["packages/*/src", "test"],
+  "exclude": ["node_modules", "**/dist"]
 }

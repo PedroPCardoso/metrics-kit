@@ -1,4 +1,4 @@
-import { ObjectLiteral, Repository } from 'typeorm';
+import type { ObjectLiteral, Repository } from 'typeorm';
 import { MetricsBuilder } from './metrics.builder';
 import { MetricsOptions } from './types';
 
