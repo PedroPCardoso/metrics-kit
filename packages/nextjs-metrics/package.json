@@ -1,6 +1,6 @@
 {
   "name": "nextjs-metrics",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Metrics & trends for Next.js / any Node runtime, over Prisma or Drizzle. (Built on nestjs-metrics-core.)",
   "keywords": [
     "nextjs",
