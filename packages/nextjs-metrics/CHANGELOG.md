@@ -4,6 +4,15 @@
 
 ### Minor Changes
 
+- f8f4bae: Add isolated `nextjs-metrics/prisma` and `nextjs-metrics/drizzle` subpath entry points
+  (with classic-resolution folder stubs), so importing one adapter never loads the other.
+  Restores the subpath layout that was dropped in the unscoped-packages refactor. The root
+  entry still re-exports both adapters for backward compatibility.
+
+## 0.2.0
+
+### Minor Changes
+
 - e4044a2: Restructure into the `@metrics-kit` monorepo. The metrics engine is extracted into
   `nestjs-metrics-core` (ORM-agnostic, dual-mode: TypeORM query builder or a raw-SQL
   executor for Prisma/Drizzle/any driver). `@pedropcardoso/metrics-nestjs` holds the NestJS
