@@ -11,6 +11,8 @@ export default defineConfig({
       { find: /^nestjs-metrics-core$/, replacement: r('packages/core/src/index.ts') },
       { find: /^nestjs-metrics\/nestjs$/, replacement: r('packages/nestjs-metrics/src/nestjs/index.ts') },
       { find: /^nestjs-metrics$/, replacement: r('packages/nestjs-metrics/src/index.ts') },
+      { find: /^nextjs-metrics\/prisma$/, replacement: r('packages/nextjs-metrics/src/prisma/index.ts') },
+      { find: /^nextjs-metrics\/drizzle$/, replacement: r('packages/nextjs-metrics/src/drizzle/index.ts') },
       { find: /^nextjs-metrics$/, replacement: r('packages/nextjs-metrics/src/index.ts') },
       { find: /^@core\/(.*)$/, replacement: r('packages/core/src') + '/$1' },
     ],

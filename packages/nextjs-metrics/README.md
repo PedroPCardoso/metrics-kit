@@ -12,10 +12,15 @@ npm install nextjs-metrics
 you use (`drizzle-orm` is loaded lazily, so Prisma users never need it). The
 terminals (`metrics()`, `trends()`) are **async**.
 
+Each adapter lives under its own **isolated subpath** — `nextjs-metrics/prisma` and
+`nextjs-metrics/drizzle` — so importing one never loads the other (these resolve under
+both modern and classic `moduleResolution`). Both are also re-exported from the package
+root (`nextjs-metrics`) for convenience.
+
 ## Prisma
 
 ```ts
-import { prismaMetrics } from 'nextjs-metrics';
+import { prismaMetrics } from 'nextjs-metrics/prisma';
 
 // Prisma can't report its provider at runtime — state the dialect.
 const builder = prismaMetrics(prisma, {
@@ -36,7 +41,7 @@ The emitted SQL runs through `prisma.$queryRawUnsafe`; values bind positionally.
 Pass the typed table/column objects — the SQL names and **dialect** are inferred:
 
 ```ts
-import { drizzleMetrics } from 'nextjs-metrics';
+import { drizzleMetrics } from 'nextjs-metrics/drizzle';
 import { orders } from './schema';
 
 await drizzleMetrics(db, { table: orders, dateColumn: orders.createdAt })

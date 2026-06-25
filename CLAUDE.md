@@ -20,6 +20,11 @@ resolution work we ship a physical **`nestjs/package.json` stub** pointing at
 `../dist/nestjs/...` (the `rxjs/operators` pattern). Don't delete it, and keep
 `"nestjs"` in `package.json#files` so it gets published.
 
+The `nextjs-metrics` package follows the same pattern for its isolated adapter
+subpaths: physical `prisma/package.json` and `drizzle/package.json` stubs (pointing at
+`../dist/prisma/...` and `../dist/drizzle/...`), with `"prisma"`/`"drizzle"` kept in
+`package.json#files`. Same rule — don't delete the stubs.
+
 ## Releasing
 
 Releases use **Changesets** and are **two-phase**: pushing to `master` only opens a

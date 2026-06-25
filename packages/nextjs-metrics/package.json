@@ -26,10 +26,20 @@
       "require": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
+    "./prisma": {
+      "require": "./dist/prisma/index.js",
+      "types": "./dist/prisma/index.d.ts"
+    },
+    "./drizzle": {
+      "require": "./dist/drizzle/index.js",
+      "types": "./dist/drizzle/index.d.ts"
+    },
     "./package.json": "./package.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "prisma",
+    "drizzle"
   ],
   "engines": {
     "node": ">=18"
