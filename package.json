@@ -1,22 +1,94 @@
 {
-  "name": "metrics-kit-monorepo",
-  "private": true,
-  "description": "Monorepo for @pedropcardoso/metrics-* and the nestjs-metrics façade.",
-  "license": "MIT",
-  "workspaces": [
-    "packages/core",
-    "packages/nestjs",
-    "packages/nextjs",
-    "packages/nestjs-metrics"
+  "name": "nestjs-metrics",
+  "version": "0.2.4",
+  "description": "Generate metrics and trends from your database (TypeORM, Prisma or Drizzle) for your dashboards.",
+  "keywords": [
+    "nestjs",
+    "typeorm",
+    "prisma",
+    "drizzle",
+    "metrics",
+    "trends",
+    "charts",
+    "dashboard",
+    "analytics"
   ],
+  "author": "Pedro Cardoso",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PedroPCardoso/nestjs-metrics.git"
+  },
+  "homepage": "https://github.com/PedroPCardoso/nestjs-metrics#readme",
+  "bugs": {
+    "url": "https://github.com/PedroPCardoso/nestjs-metrics/issues"
+  },
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./nestjs": {
+      "require": "./dist/nestjs/index.js",
+      "types": "./dist/nestjs/index.d.ts"
+    },
+    "./prisma": {
+      "require": "./dist/prisma/index.js",
+      "types": "./dist/prisma/index.d.ts"
+    },
+    "./drizzle": {
+      "require": "./dist/drizzle/index.js",
+      "types": "./dist/drizzle/index.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "nestjs",
+    "prisma",
+    "drizzle"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
-    "build": "npm run build -w @pedropcardoso/metrics-core && npm run build -w @pedropcardoso/metrics-nestjs && npm run build -w @pedropcardoso/metrics-nextjs && npm run build -w nestjs-metrics",
-    "typecheck": "tsc --noEmit",
+    "build": "tsup",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint \"packages/*/src/**/*.ts\" \"test/**/*.ts\"",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint \"{src,test}/**/*.ts\"",
     "smoke": "bash scripts/consumer-smoke.sh",
     "release": "changeset publish"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^10 || ^11",
+    "typeorm": "^0.3",
+    "@prisma/client": "*",
+    "drizzle-orm": "*"
+  },
+  "peerDependenciesMeta": {
+    "@nestjs/common": {
+      "optional": true
+    },
+    "typeorm": {
+      "optional": true
+    },
+    "@prisma/client": {
+      "optional": true
+    },
+    "drizzle-orm": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "luxon": "^3"
   },
   "devDependencies": {
     "@changesets/cli": "^2",
@@ -31,7 +103,6 @@
     "better-sqlite3": "^11",
     "drizzle-orm": "^0.36",
     "eslint": "^8",
-    "luxon": "^3",
     "mysql2": "^3",
     "pg": "^8",
     "reflect-metadata": "^0.2",

@@ -5,7 +5,7 @@ import {
   InvalidVariationsCountException,
   Metrics,
   Period,
-} from '@pedropcardoso/metrics-core';
+} from '../src/index';
 import {
   allTestDrivers,
   createOrdersDataSource,

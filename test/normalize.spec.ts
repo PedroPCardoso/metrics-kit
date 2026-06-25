@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeData, normalizeLabel } from '@core/formatting/normalize';
+import { normalizeData, normalizeLabel } from '../src/formatting/normalize';
 
 /**
  * The executor mode runs raw SQL through Prisma/Drizzle/pg drivers, which each

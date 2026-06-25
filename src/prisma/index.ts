@@ -1,10 +1,6 @@
-import {
-  MetricsBuilder,
-  type ExecutorSpec,
-  type MetricsOptions,
-  type Row,
-  type SupportedDialect,
-} from '@pedropcardoso/metrics-core';
+import { MetricsBuilder } from '../metrics.builder';
+import type { ExecutorSpec, Row, SupportedDialect } from '../datasource';
+import type { MetricsOptions } from '../types';
 
 /**
  * The slice of a PrismaClient we use: `$queryRawUnsafe` runs a parameterized SQL

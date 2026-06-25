@@ -1,6 +1,7 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import { ObjectLiteral, SelectQueryBuilder } from 'typeorm';
-import { MetricsBuilder, MetricsOptions } from '@pedropcardoso/metrics-core';
+import { MetricsBuilder } from '../metrics.builder';
+import { MetricsOptions } from '../types';
 import { METRICS_FEATURE_OPTIONS, METRICS_ROOT_OPTIONS, MetricsModuleOptions } from './tokens';
 
 /**

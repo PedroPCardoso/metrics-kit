@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Aggregate } from '@core/enums/aggregate.enum';
-import { dialectFor } from '@core/dialects/dialect.factory';
+import { Aggregate } from '../src/enums/aggregate.enum';
+import { dialectFor } from '../src/dialects/dialect.factory';
 
 /**
  * Structural guard: pin the SQL each dialect emits for the tracer query, so a

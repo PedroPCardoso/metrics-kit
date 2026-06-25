@@ -1,11 +1,15 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/index.ts', 'src/nestjs/index.ts'],
+  entry: [
+    'src/index.ts',
+    'src/nestjs/index.ts',
+    'src/prisma/index.ts',
+    'src/drizzle/index.ts',
+  ],
   format: ['cjs'],
   dts: true,
   clean: true,
   sourcemap: true,
   target: 'node18',
-  external: ['@pedropcardoso/metrics-core', '@pedropcardoso/metrics-nestjs'],
 });

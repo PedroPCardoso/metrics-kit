@@ -1,13 +1,8 @@
 import { getTableColumns, getTableName } from 'drizzle-orm';
 import type { Column, Table } from 'drizzle-orm';
-import {
-  MetricsBuilder,
-  type ExecutorSpec,
-  type MetricsOptions,
-  type Row,
-  type SqlExecutor,
-  type SupportedDialect,
-} from '@pedropcardoso/metrics-core';
+import { MetricsBuilder } from '../metrics.builder';
+import type { ExecutorSpec, Row, SqlExecutor, SupportedDialect } from '../datasource';
+import type { MetricsOptions } from '../types';
 
 /**
  * A Drizzle db exposes the underlying driver as `$client`. Duck-typed so the
