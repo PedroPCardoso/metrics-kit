@@ -42,6 +42,12 @@ const WhereInputSchema: z.ZodType<import('./where').WhereInput> = z.record(
 export const MetricsOptionsSchema = z.object({
   locale: LocaleSchema.optional(),
   timezone: TimezoneSchema.optional(),
+  cache: z
+    .object({
+      enabled: z.boolean(),
+      ttl: z.number(),
+    })
+    .optional(),
 });
 
 export const ExecutorSpecSchema = z.object({

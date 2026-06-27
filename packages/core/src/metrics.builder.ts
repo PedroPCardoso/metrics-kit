@@ -27,6 +27,9 @@ import {
 import { gapFillRaw, populate, presentIntegerLabels } from './formatting/missing-data';
 import { GroupedTrendsResult, MetricsOptions, TrendsResult, VariationResult } from './types';
 import { PERIOD_TO_DATE_PART, toTrendRow, isRecord } from './types/helpers';
+import type { CacheOptions, CacheStore } from './cache/types';
+import { planCacheKey } from './cache/cache-key';
+import { defaultCacheStore } from './cache/shared';
 
 const DEFAULT_LOCALE = 'en';
 const DEFAULT_TIMEZONE = 'UTC';
@@ -67,6 +70,8 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   private missingLabels: (string | number)[] = [];
   private groupedLabels: (string | number)[] = [];
   private groupedAggregate: Aggregate = Aggregate.SUM;
+  private caching: CacheOptions | null = null;
+  private cacheStore: CacheStore | undefined;
   private now = new Date();
   private year: number = this.now.getFullYear();
   private month: number = this.now.getMonth() + 1;
@@ -77,6 +82,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     private readonly backend: QueryBackend,
     tableName: string,
     options: MetricsOptions = {},
+    cacheStore?: CacheStore,
   ) {
     if (!MetricsBuilder.skipValidation) {
       validateMetricsOptions(options);
@@ -86,6 +92,10 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     this.locale = options.locale ?? DEFAULT_LOCALE;
     this.timezone = options.timezone ?? DEFAULT_TIMEZONE;
     assertTimezone(this.timezone);
+    if (options.cache?.enabled) {
+      this.caching = options.cache;
+      this.cacheStore = cacheStore ?? defaultCacheStore;
+    }
     this.column = this.qualify('id');
     this.dateColumnRef = this.qualify('created_at');
   }
@@ -115,12 +125,14 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     const clone = new MetricsBuilder<T>(this.backend, this.tableName, {
       locale: this.locale,
       timezone: this.timezone,
-    });
+    }, this.cacheStore);
     clone.aggregateFn = this.aggregateFn;
     clone.column = this.column;
     clone.dateColumnRef = this.dateColumnRef;
     clone.tableName = this.tableName;
     clone.extraFilters = this.extraFilters;
+    clone.caching = this.caching;
+    clone.cacheStore = this.cacheStore;
     return clone;
   }
 
@@ -128,8 +140,9 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   static query<T extends ObjectLiteral>(
     qb: SelectQueryBuilder<T>,
     options?: MetricsOptions,
+    cacheStore?: CacheStore,
   ): MetricsBuilder<T> {
-    return new MetricsBuilder(new TypeOrmBackend(qb), qb.alias, options);
+    return new MetricsBuilder(new TypeOrmBackend(qb), qb.alias, options, cacheStore);
   }
 
   /**
@@ -140,6 +153,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     dataSource: DataSource,
     spec: ExecutorSpec,
     options?: MetricsOptions,
+    cacheStore?: CacheStore,
   ): MetricsBuilder<R> {
     if (!MetricsBuilder.skipValidation) {
       validateExecutorSpec(spec);
@@ -147,7 +161,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     assertSafeIdentifier(spec.table);
     const dialect = dialectFor(dataSource.dialect);
     const from = spec.from ?? dialect.escapeId(spec.table);
-    const builder = new MetricsBuilder<R>(new ExecutorBackend(dataSource, from), spec.table, options);
+    const builder = new MetricsBuilder<R>(new ExecutorBackend(dataSource, from), spec.table, options, cacheStore);
     if (spec.dateColumn) {
       builder.dateColumn(spec.dateColumn);
     }
@@ -457,7 +471,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
       tz: this.tzActive() ? this.timezone : undefined,
     };
 
-    const rows = await this.backend.run(plan);
+    const rows = await this.withCache(plan, () => this.backend.run(plan));
     return normalizeData(rows[0]?.data);
   }
 
@@ -609,7 +623,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
       tz: this.tzActive() ? this.timezone : undefined,
     };
 
-    const rows = await this.backend.run(plan);
+    const rows = await this.withCache(plan, () => this.backend.run(plan));
     return rows.map(toTrendRow);
   }
 
@@ -754,6 +768,24 @@ export class MetricsBuilder<T extends ObjectLiteral> {
       { year: this.year, month: this.month, day: this.day, week: this.week },
       this.windowCount,
     );
+  }
+
+  /**
+   * Execute the callback, returning a cached value when available for the
+   * given query plan. A no-op when caching is not enabled on this builder.
+   */
+  private async withCache<T>(plan: QueryPlan, execute: () => Promise<T>): Promise<T> {
+    if (!this.caching || !this.cacheStore) {
+      return execute();
+    }
+    const key = planCacheKey(plan);
+    const cached = this.cacheStore.get<T>(key);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const result = await execute();
+    this.cacheStore.set(key, result, this.caching.ttl);
+    return result;
   }
 }
 
