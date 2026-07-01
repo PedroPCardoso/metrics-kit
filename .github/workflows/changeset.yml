@@ -1,0 +1,77 @@
+name: Changeset
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check for existing changesets
+        id: check
+        run: |
+          HAS=false
+          for f in .changeset/*.md; do
+            [ "$(basename "$f")" = "config.json" ] && continue
+            HAS=true
+            break
+          done
+          echo "has_changeset=$HAS" >> "$GITHUB_OUTPUT"
+
+      - name: Generate changeset
+        if: steps.check.outputs.has_changeset == 'false'
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.number }}
+        run: |
+          git fetch origin "$BASE_REF" --depth=1
+
+          CHANGED=$(git diff --name-only "origin/$BASE_REF...HEAD" | \
+            grep -E '^packages/(core|nestjs-metrics|nextjs-metrics)/' | \
+            sed 's|^packages/\([^/]*\)/.*|\1|' | sort -u | \
+            while read -r dir; do
+              case "$dir" in
+                core) echo "nestjs-metrics-core" ;;
+                nestjs-metrics) echo "nestjs-metrics" ;;
+                nextjs-metrics) echo "nextjs-metrics" ;;
+              esac
+            done | sort -u)
+
+          if [ -z "$CHANGED" ]; then
+            echo "No package changes detected, skipping changeset"
+            exit 0
+          fi
+
+          FILE=".changeset/auto-pr-$PR_NUMBER.md"
+          {
+            echo "---"
+            for pkg in $CHANGED; do
+              echo "'$pkg': patch"
+            done
+            echo "---"
+            echo ""
+            echo "$PR_TITLE"
+          } > "$FILE"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$FILE"
+          git commit -m "chore: add changeset for PR #$PR_NUMBER"
+          git push

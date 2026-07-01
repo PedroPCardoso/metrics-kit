@@ -48,6 +48,10 @@ the host. Don't run `npm install`/`npm test`/etc. directly on the host.
 Scripts (run them in the container): `build` (tsup), `test` (vitest), `typecheck`
 (`tsc --noEmit`), `lint` (eslint), `smoke` (`scripts/consumer-smoke.sh`).
 
+## Skills
+
+- **`document-new-feature`** — `.claude/skills/document-new-feature/SKILL.md` — when implementing a new feature, update the docs (local `docs/` and readme.io). Model-invoked: fires automatically on feature work.
+
 ## Architecture
 
 See **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** for the builder internals.
