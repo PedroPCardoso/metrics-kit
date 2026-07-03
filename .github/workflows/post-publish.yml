@@ -1,0 +1,37 @@
+name: Post-Publish Smoke Test
+
+on:
+  release:
+    types: [published]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  smoke-test:
+    strategy:
+      matrix:
+        node-version: [18, 20, 22]
+      fail-fast: false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Wait for NPM propagation
+        run: sleep 60
+
+      - name: Test package import in fresh project
+        run: |
+          TMP=$(mktemp -d)
+          cd "$TMP"
+          npm init -y >/dev/null 2>&1
+          npm install --no-audit --no-fund \
+            nestjs-metrics@latest typeorm better-sqlite3 reflect-metadata @nestjs/common @nestjs/core
+          node -e "
+            require('reflect-metadata');
+            require('nestjs-metrics');
+            require('nestjs-metrics/nestjs');
+            console.log('✓ nestjs-metrics imports OK on Node ${{ matrix.node-version }}');
+          "
