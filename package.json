@@ -39,6 +39,6 @@
     "typedoc": "^0.28",
     "typeorm": "^0.3",
     "typescript": "^5",
-    "vitest": "^2"
+    "vitest": "^4"
   }
 }
