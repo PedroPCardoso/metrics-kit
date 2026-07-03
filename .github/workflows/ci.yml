@@ -40,11 +40,7 @@ jobs:
           POSTGRES_USER: metrics
           POSTGRES_PASSWORD: metrics
           POSTGRES_DB: metrics
-        options: >-
-          --health-cmd pg_isready -U metrics
-          --health-interval 3s
-          --health-timeout 5s
-          --health-retries 20
+        options: '--health-cmd "pg_isready -U metrics" --health-interval 3s --health-timeout 5s --health-retries 20'
       mysql:
         image: mysql:8
         env:
@@ -52,11 +48,7 @@ jobs:
           MYSQL_USER: metrics
           MYSQL_PASSWORD: metrics
           MYSQL_DATABASE: metrics
-        options: >-
-          --health-cmd "mysqladmin ping -h 127.0.0.1 -u root -proot"
-          --health-interval 3s
-          --health-timeout 5s
-          --health-retries 40
+        options: '--health-cmd "mysqladmin ping -h 127.0.0.1 -u root -proot" --health-interval 3s --health-timeout 5s --health-retries 40'
     steps:
       - uses: actions/checkout@v4
 
