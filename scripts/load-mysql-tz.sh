@@ -3,9 +3,9 @@
 # the IANA timezone tables MySQL's test suite needs.
 set -euo pipefail
 
-PG_HOST="${PG_HOST:-postgres}"
+PG_HOST="${PG_HOST:-localhost}"
 PG_PORT="${PG_PORT:-5432}"
-MYSQL_HOST="${MYSQL_HOST:-mysql}"
+MYSQL_HOST="${MYSQL_HOST:-localhost}"
 MYSQL_PORT="${MYSQL_PORT:-3306}"
 
 echo "Waiting for Postgres at $PG_HOST:$PG_PORT..."
