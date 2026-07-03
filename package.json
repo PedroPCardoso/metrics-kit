@@ -30,7 +30,7 @@
     "@typescript-eslint/parser": "^7",
     "better-sqlite3": "^11",
     "drizzle-orm": "^0.36",
-    "eslint": "^8",
+    "eslint": "^10",
     "luxon": "^3",
     "mysql2": "^3",
     "pg": "^8",
