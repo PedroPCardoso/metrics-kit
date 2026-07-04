@@ -2,11 +2,27 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DataSource } from 'typeorm';
 import { Metrics, MemoryCacheStore, Period } from 'nestjs-metrics-core';
 import type { CacheStore, TrendsResult } from 'nestjs-metrics-core';
+import { planCacheKey } from '@core/cache/cache-key';
+import { defaultCacheStore } from '@core/cache/shared';
+import type { QueryPlan } from '@core/backend/query-plan';
 import {
   createOrdersDataSource,
   ordersQuery,
   seedOrders,
 } from './helpers/orders-datasource';
+
+describe('cache keys', () => {
+  it('uses a versioned namespace prefix', () => {
+    const plan: QueryPlan = {
+      source: 'orders',
+      select: [{ expr: 'COUNT("orders"."id")', alias: 'data' }],
+      where: [],
+      params: {},
+    };
+
+    expect(planCacheKey(plan)).toMatch(/^mk:v1:[a-f0-9]{32}$/);
+  });
+});
 
 describe('cache — metrics()', () => {
   let dataSource: DataSource;
@@ -17,6 +33,7 @@ describe('cache — metrics()', () => {
   });
 
   afterEach(async () => {
+    defaultCacheStore.clear();
     await dataSource.destroy();
   });
 
@@ -82,6 +99,49 @@ describe('cache — metrics()', () => {
     expect(cache.stats().hits).toBe(0);
     expect(cache.stats().misses).toBe(2);
     cache.destroy();
+  });
+
+  it('does not collide between executor tables that share the default store', async () => {
+    await seedOrders(dataSource, [
+      { createdAt: `${year}-01-10 10:00:00` },
+    ]);
+    await dataSource.query(`
+      CREATE TABLE refunds (
+        id integer primary key autoincrement,
+        amount decimal(10, 2) default 0,
+        created_at datetime
+      )
+    `);
+    await dataSource.query(`
+      INSERT INTO refunds (amount, created_at) VALUES
+      (50, '${year}-01-11 10:00:00'),
+      (75, '${year}-01-12 10:00:00')
+    `);
+    defaultCacheStore.clear();
+    const opts = { cache: { enabled: true, ttl: 60 } };
+    const executor = {
+      dialect: 'sqlite' as const,
+      execute: (sql: string, params: unknown[]) => dataSource.query(sql, params),
+    };
+
+    const ordersCount = await Metrics.queryExecutor(
+      executor,
+      { table: 'source', from: 'orders AS source' },
+      opts,
+    )
+      .count()
+      .metrics();
+    const refundsCount = await Metrics.queryExecutor(
+      executor,
+      { table: 'source', from: 'refunds AS source' },
+      opts,
+    )
+      .count()
+      .metrics();
+
+    expect(ordersCount).toBe(1);
+    expect(refundsCount).toBe(2);
+    expect(defaultCacheStore.stats().misses).toBe(2);
   });
 
   it('respects TTL — stale entries are re-fetched', async () => {

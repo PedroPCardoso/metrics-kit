@@ -20,6 +20,7 @@ function stableStringify(value: unknown): string {
  */
 export function planCacheKey(plan: QueryPlan): string {
   const payload = stableStringify({
+    source: plan.source,
     select: plan.select,
     where: plan.where,
     groupBy: plan.groupBy,
@@ -28,5 +29,5 @@ export function planCacheKey(plan: QueryPlan): string {
     params: plan.params,
     tz: plan.tz,
   });
-  return createHash('md5').update(payload).digest('hex');
+  return `mk:v1:${createHash('md5').update(payload).digest('hex')}`;
 }

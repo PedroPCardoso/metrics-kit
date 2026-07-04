@@ -106,6 +106,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     tableName: string,
     options: MetricsOptions = {},
     cacheStore?: CacheStore,
+    private readonly sourceIdentity = tableName,
   ) {
     if (!MetricsBuilder.skipValidation) {
       validateMetricsOptions(options);
@@ -148,7 +149,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     const clone = new MetricsBuilder<T>(this.backend, this.tableName, {
       locale: this.locale,
       timezone: this.timezone,
-    }, this.cacheStore);
+    }, this.cacheStore, this.sourceIdentity);
     clone.aggregateFn = this.aggregateFn;
     clone.column = this.column;
     clone.dateColumnRef = this.dateColumnRef;
@@ -181,7 +182,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     options?: MetricsOptions,
     cacheStore?: CacheStore,
   ): MetricsBuilder<T> {
-    return new MetricsBuilder(new TypeOrmBackend(qb), qb.alias, options, cacheStore);
+    return new MetricsBuilder(new TypeOrmBackend(qb), qb.alias, options, cacheStore, qb.getQuery());
   }
 
   /**
@@ -215,7 +216,13 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     assertSafeIdentifier(spec.table);
     const dialect = dialectFor(dataSource.dialect);
     const from = spec.from ?? dialect.escapeId(spec.table);
-    const builder = new MetricsBuilder<R>(new ExecutorBackend(dataSource, from), spec.table, options, cacheStore);
+    const builder = new MetricsBuilder<R>(
+      new ExecutorBackend(dataSource, from),
+      spec.table,
+      options,
+      cacheStore,
+      from,
+    );
     if (spec.dateColumn) {
       builder.dateColumn(spec.dateColumn);
     }
@@ -708,6 +715,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     this.applyTz(params);
 
     const plan: QueryPlan = {
+      source: this.sourceIdentity,
       select: [{ expr: this.dialect.aggregate(this.aggregateFn, this.column), alias: 'data' }],
       where,
       params,
@@ -818,6 +826,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
       return this.missingLabels;
     }
     const plan: QueryPlan = {
+      source: this.sourceIdentity,
       select: [{ expr: this.labelColumnName as string, alias: 'label' }],
       where: [],
       distinct: true,
@@ -879,6 +888,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     this.applyTz(params);
 
     const plan: QueryPlan = {
+      source: this.sourceIdentity,
       select,
       where,
       groupBy: 'label',
