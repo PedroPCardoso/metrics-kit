@@ -710,20 +710,28 @@ export class MetricsBuilder<T extends ObjectLiteral> {
    * ```
    */
   async metrics(): Promise<number> {
+    const plan = this.metricsPlan();
+    const rows = await this.withCache(plan, () => this.backend.run(plan));
+    return normalizeData(rows[0]?.data);
+  }
+
+  /** Remove the cached entry for the current single-metric query shape. */
+  async invalidateMetrics(): Promise<void> {
+    this.invalidateCache(this.metricsPlan());
+  }
+
+  private metricsPlan(): QueryPlan {
     const params: Record<string, unknown> = {};
     const where = this.buildFilters(params);
     this.applyTz(params);
 
-    const plan: QueryPlan = {
+    return {
       source: this.sourceIdentity,
       select: [{ expr: this.dialect.aggregate(this.aggregateFn, this.column), alias: 'data' }],
       where,
       params,
       tz: this.tzActive() ? this.timezone : undefined,
     };
-
-    const rows = await this.withCache(plan, () => this.backend.run(plan));
-    return normalizeData(rows[0]?.data);
   }
 
   /**
@@ -811,6 +819,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return inPercent ? toPercent(series) : series;
   }
 
+  /** Remove the cached entry for the current trends query shape. */
+  async invalidateTrends(): Promise<void> {
+    this.invalidateCache(this.trendsPlan());
+  }
+
   /** True when grouping by a date period (not a categorical column or range). */
   private isPeriodMode(): boolean {
     return this.period !== null && !this.labelColumnName && !this.range;
@@ -878,6 +891,12 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   }
 
   private async trendsData(): Promise<RawTrendRow[]> {
+    const plan = this.trendsPlan();
+    const rows = await this.withCache(plan, () => this.backend.run(plan));
+    return rows.map(toTrendRow);
+  }
+
+  private trendsPlan(): QueryPlan {
     const params: Record<string, unknown> = {};
     const select: SelectItem[] = [
       { expr: this.dialect.aggregate(this.aggregateFn, this.column), alias: 'data' },
@@ -887,7 +906,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     const where = this.buildFilters(params);
     this.applyTz(params);
 
-    const plan: QueryPlan = {
+    return {
       source: this.sourceIdentity,
       select,
       where,
@@ -896,9 +915,6 @@ export class MetricsBuilder<T extends ObjectLiteral> {
       params,
       tz: this.tzActive() ? this.timezone : undefined,
     };
-
-    const rows = await this.withCache(plan, () => this.backend.run(plan));
-    return rows.map(toTrendRow);
   }
 
   /**
@@ -1052,14 +1068,30 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     if (!this.caching || !this.cacheStore) {
       return execute();
     }
-    const key = planCacheKey(plan);
+    const key = planCacheKey(plan, this.caching.keyPrefix);
     const cached = this.cacheStore.get<T>(key);
     if (cached !== undefined) {
+      this.logCache('hit', key);
       return cached;
     }
+    this.logCache('miss', key);
     const result = await execute();
     this.cacheStore.set(key, result, this.caching.ttl);
+    this.logCache('set', key);
     return result;
+  }
+
+  private invalidateCache(plan: QueryPlan): void {
+    if (!this.caching || !this.cacheStore) {
+      return;
+    }
+    const key = planCacheKey(plan, this.caching.keyPrefix);
+    this.cacheStore.del(key);
+    this.logCache('delete', key);
+  }
+
+  private logCache(type: 'hit' | 'miss' | 'set' | 'delete', key: string): void {
+    this.caching?.logger?.({ type, key });
   }
 }
 

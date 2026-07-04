@@ -51,6 +51,11 @@ export const MetricsOptionsSchema = z.object({
         .number()
         .int({ message: 'Cache ttl must be a positive integer number of seconds' })
         .positive({ message: 'Cache ttl must be a positive integer number of seconds' }),
+      keyPrefix: z.string().min(1).optional(),
+      logger: z.custom<import('./cache/types').CacheLogger>(
+        (value) => typeof value === 'function',
+        { message: 'Cache logger must be a function' },
+      ).optional(),
     })
     .optional(),
 });

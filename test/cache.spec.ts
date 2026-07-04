@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DataSource } from 'typeorm';
 import { Metrics, MemoryCacheStore, Period, ValidationError } from 'nestjs-metrics-core';
-import type { CacheStore, TrendsResult } from 'nestjs-metrics-core';
+import type { CacheEvent, CacheStore, TrendsResult } from 'nestjs-metrics-core';
 import { planCacheKey } from '@core/cache/cache-key';
 import { defaultCacheStore } from '@core/cache/shared';
 import type { QueryPlan } from '@core/backend/query-plan';
@@ -21,6 +21,17 @@ describe('cache keys', () => {
     };
 
     expect(planCacheKey(plan)).toMatch(/^mk:v1:[a-f0-9]{32}$/);
+  });
+
+  it('includes a custom key prefix before the version namespace', () => {
+    const plan: QueryPlan = {
+      source: 'orders',
+      select: [{ expr: 'COUNT("orders"."id")', alias: 'data' }],
+      where: [],
+      params: {},
+    };
+
+    expect(planCacheKey(plan, 'tenant-a')).toMatch(/^tenant-a:mk:v1:[a-f0-9]{32}$/);
   });
 });
 
@@ -156,6 +167,56 @@ describe('cache — metrics()', () => {
     expect(store.stats().misses).toBe(0);
     store.destroy();
   });
+
+  it('emits cache miss, set, hit, and delete events when logger is configured', async () => {
+    await seedOrders(dataSource, [
+      { createdAt: `${year}-01-10 10:00:00` },
+    ]);
+
+    const events: CacheEvent[] = [];
+    const store = new MemoryCacheStore();
+    const opts = {
+      cache: {
+        enabled: true,
+        ttl: 60,
+        logger: (event: CacheEvent) => events.push(event),
+      },
+    };
+
+    const builder = Metrics.query(ordersQuery(dataSource), opts, store)
+      .count()
+      .byMonth();
+
+    expect(await builder.metrics()).toBe(1);
+    expect(await builder.metrics()).toBe(1);
+    await builder.invalidateMetrics();
+
+    expect(events.map((event) => event.type)).toEqual(['miss', 'set', 'hit', 'delete']);
+    expect(events.every((event) => event.key.startsWith('mk:v1:'))).toBe(true);
+    store.destroy();
+  });
+
+  it('uses keyPrefix to isolate otherwise identical cache entries', async () => {
+    await seedOrders(dataSource, [
+      { createdAt: `${year}-01-10 10:00:00` },
+    ]);
+
+    const store = new MemoryCacheStore();
+    const base = { cache: { enabled: true, ttl: 60 } };
+    const prefixed = { cache: { enabled: true, ttl: 60, keyPrefix: 'tenant-a' } };
+
+    await Metrics.query(ordersQuery(dataSource), base, store)
+      .count()
+      .byMonth()
+      .metrics();
+    await Metrics.query(ordersQuery(dataSource), prefixed, store)
+      .count()
+      .byMonth()
+      .metrics();
+
+    expect(store.stats().misses).toBe(2);
+    store.destroy();
+  });
 });
 
 describe('cache — trends()', () => {
@@ -211,6 +272,27 @@ describe('cache — trends()', () => {
     expect(result.data).toHaveLength(3);
     expect(result.data[1]).toBe(0);
     expect(cache.stats().misses).toBeGreaterThanOrEqual(1);
+    cache.destroy();
+  });
+
+  it('can invalidate the cached trends query for the current builder chain', async () => {
+    await seedOrders(dataSource, [
+      { createdAt: `${year}-01-10 10:00:00` },
+    ]);
+
+    const cache = new MemoryCacheStore();
+    const opts = { cache: { enabled: true, ttl: 60 } };
+    const builder = Metrics.query(ordersQuery(dataSource), opts, cache)
+      .countByMonth();
+
+    await builder.trends();
+    await builder.trends();
+    expect(cache.stats().hits).toBe(1);
+
+    await builder.invalidateTrends();
+    await builder.trends();
+
+    expect(cache.stats().misses).toBe(2);
     cache.destroy();
   });
 });
