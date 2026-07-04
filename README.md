@@ -68,6 +68,47 @@ See each package's README for the full API. Intentional differences from the
 original Laravel library are in [DIVERGENCES.md](./DIVERGENCES.md); architecture in
 [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
 
+## Caching
+
+Caching is opt-in per query or adapter default. The default store is in-memory;
+custom stores implement the `CacheStore` interface, which is the extension point
+for Redis or other backends.
+
+```typescript
+const cache = new MemoryCacheStore();
+const events: CacheEvent[] = [];
+
+const builder = Metrics.query(qb, {
+  cache: {
+    enabled: true,
+    ttl: 60,
+    keyPrefix: 'tenant-a',
+    logger: (event) => events.push(event), // hit, miss, set, delete
+  },
+}, cache);
+
+await builder.count().metrics();
+await builder.invalidateMetrics(); // bust this metric query
+```
+
+Cache keys include the source table/FROM identity and the built-in `mk:v1`
+namespace. Custom `keyPrefix` values are prepended before that namespace; older
+in-memory keys intentionally miss after the `mk:v1` cache-key format change.
+
+## Identifier safety
+
+Executor specs are validated with Zod for clearer upfront errors, but SQL
+identifier injection is blocked by the builder choke point:
+`assertSafeIdentifier` plus `qualify`. Do not relax that guard because named SQL
+parameters protect values, not table or column identifiers.
+
+## Error codes
+
+All typed errors expose a stable `code`; see
+[docs/ERROR_CODES.md](./docs/ERROR_CODES.md) for the full reference table.
+Serialized errors redact bound SQL `params` by default, while raw params remain
+available in-process through `error.context?.params` for trusted debugging.
+
 ## NestJS guide
 
 A comprehensive guide covering all features, queries, filters and usage patterns
