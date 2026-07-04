@@ -1,5 +1,6 @@
 {
   "main": "../dist/nestjs/index.js",
+  "module": "../dist/nestjs/index.mjs",
   "types": "../dist/nestjs/index.d.ts",
   "sideEffects": false
 }

@@ -19,6 +19,14 @@ runs over TypeORM, Prisma or Drizzle.
 engine, two framework-flavoured packages. The terminals (`metrics()`, `trends()`,
 `metricsWithVariations()`) are **async**.
 
+All packages ship dual CJS/ESM builds. Existing `require(...)` consumers keep
+using `dist/*.js`; ESM consumers resolve `dist/*.mjs` through the `import`
+condition. Physical subpath stubs such as `nestjs-metrics/nestjs` and
+`nextjs-metrics/prisma` are still published so classic TypeScript
+`moduleResolution: "node"` continues to resolve subpaths. Current built `dist`
+sizes are about 464K (`core`), 60K (`nestjs-metrics`) and 112K
+(`nextjs-metrics`).
+
 ## Quick start
 
 ### NestJS / TypeORM — `nestjs-metrics`

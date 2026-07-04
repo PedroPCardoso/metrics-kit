@@ -16,7 +16,7 @@
 | 4 | **Semana = ISO-8601 uniforme** via SQL por dialeto, com teste cross-dialeto. | Original é inconsistente (`Carbon::week` no PHP vs `%W`/`WEEK()`/`EXTRACT` no SQL). ISO é o padrão de analytics. |
 | 5 | **Manter as 3 formas de uso** (`Metrics.query`, `MetricsService`+módulo, `metricsFor(repo)`) como fachadas finas sobre **um único core**; testes de fumaça por fachada. | Pedido explícito do usuário. Core único evita divergência de comportamento. |
 | 6 | **Testes multi-dialeto reais (Testcontainers Postgres+MySQL) bloqueiam todo PR**, além de SQLite + snapshots de SQL. | Garantia dura de execução real desde a v0.1. |
-| 7 | **Distribuição CJS-first** (`"type": "commonjs"`) + type declarations. Dual/ESM fica para uma major futura. | Ecossistema Nest/TypeORM é CJS; evita dual-package hazard nos enums/exceções. |
+| 7 | **Distribuição dual CJS/ESM** com `"type": "commonjs"`, `exports.import` para `*.mjs`, `exports.require` para `*.js` e type declarations. | Mantém consumidores CJS/Nest existentes e libera import ESM/tree-shaking sem mudar identidade pública de enums/exceções. |
 | 8 | **Atalho de entidade = `metricsFor(repo)`** (canônico) + extensão opcional de `Repository`. **Abandonar** o Active Record literal `Entity.metrics()`. | TypeORM é Data Mapper; clone sintático custaria amarrar a connection global e Active Record. Paridade é semântica, não sintática. |
 | 9 | **Bucketing timezone-aware desde a v0.1**: opção `timezone` com conversão de fuso no SQL por dialeto. | Agrupamento por data é silenciosamente dependente do fuso da conexão; requisito do usuário. |
 | 10 | **SQLite faz bucketing TZ-aware em JS (Luxon, DST-correto)**; Postgres/MySQL no SQL. Setup do contêiner MySQL **carrega as timezone tables**. | SQLite não tem TZ nativo; o caminho JS vira o oráculo DST-correto que valida o SQL dos outros dois. `CONVERT_TZ` sem tabelas retorna NULL silenciosamente. |
@@ -409,9 +409,15 @@ Abordagem **TDD** (red-green-refactor), portando a suíte de testes do original 
   "version": "0.1.0",
   "type": "commonjs",
   "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": { "require": "./dist/index.js", "types": "./dist/index.d.ts" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
   },
   "files": ["dist"],
   "peerDependencies": {
@@ -424,7 +430,8 @@ Abordagem **TDD** (red-green-refactor), portando a suíte de testes do original 
 ```
 
 - **peerDependencies** para Nest/TypeORM (não duplicar a instância do consumidor).
-- **Build CJS-first + types** via **tsup** (Decisão 7): formato único, sem dual-package hazard nos enums/exceções. Promoção a dual/ESM fica para uma major futura.
+- **Build dual CJS/ESM + types** via **tsup** (Decisão 7): CJS continua em `*.js`; ESM sai em `*.mjs`; declarações CJS/ESM saem como `*.d.ts` e `*.d.mts`.
+- Os stubs físicos de subpath (`nestjs/`, `prisma/`, `drizzle/`) continuam publicados para compatibilidade com TypeScript `moduleResolution: "node"`, que ignora o `exports` map moderno.
 - `prepublishOnly`: `lint && test && build`.
 
 ---

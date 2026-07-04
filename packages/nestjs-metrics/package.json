@@ -24,15 +24,20 @@
   },
   "type": "commonjs",
   "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
       "require": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "default": "./dist/index.js"
     },
     "./nestjs": {
+      "types": "./dist/nestjs/index.d.ts",
+      "import": "./dist/nestjs/index.mjs",
       "require": "./dist/nestjs/index.js",
-      "types": "./dist/nestjs/index.d.ts"
+      "default": "./dist/nestjs/index.js"
     },
     "./package.json": "./package.json"
   },
