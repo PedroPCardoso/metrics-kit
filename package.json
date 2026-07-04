@@ -6,6 +6,7 @@
   "packageManager": "npm@10.8.2",
   "workspaces": [
     "packages/core",
+    "packages/cli",
     "packages/nestjs-metrics",
     "packages/nextjs-metrics"
   ],

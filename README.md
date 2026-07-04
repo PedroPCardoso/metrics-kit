@@ -14,6 +14,7 @@ runs over TypeORM, Prisma or Drizzle.
 | [`nestjs-metrics-core`](packages/core) | The engine + fluent API. Dual-mode: a TypeORM query builder, or a raw-SQL executor for any driver. | `npm i nestjs-metrics-core` |
 | [`nestjs-metrics`](packages/nestjs-metrics) | The engine (`.`) + a NestJS module (`/nestjs`). | `npm i nestjs-metrics` |
 | [`nextjs-metrics`](packages/nextjs-metrics) | The engine + Prisma & Drizzle adapters, for Next.js / any Node runtime. | `npm i nextjs-metrics` |
+| [`@nestjs-metrics/cli`](packages/cli) | Generators, scaffolds, validation and a local playground. | `npx @nestjs-metrics/cli` |
 
 `nestjs-metrics` and `nextjs-metrics` both depend on `nestjs-metrics-core` — one
 engine, two framework-flavoured packages. The terminals (`metrics()`, `trends()`,
@@ -116,6 +117,25 @@ All typed errors expose a stable `code`; see
 [docs/ERROR_CODES.md](./docs/ERROR_CODES.md) for the full reference table.
 Serialized errors redact bound SQL `params` by default, while raw params remain
 available in-process through `error.context?.params` for trusted debugging.
+
+## CLI and playground
+
+The optional CLI package provides deterministic code generation and a local
+playground:
+
+```bash
+npx @nestjs-metrics/cli generate service --name OrderMetrics --entity Order
+npx @nestjs-metrics/cli generate dashboard --name Admin --metrics orders,users,revenue
+npx @nestjs-metrics/cli scaffold ecommerce
+npx @nestjs-metrics/cli scaffold saas
+npx @nestjs-metrics/cli scaffold basic
+npx @nestjs-metrics/cli validate
+npx @nestjs-metrics/cli playground
+```
+
+`metrics playground` starts a local HTTP server with sample data, visual controls,
+live preview and generated code. It is intentionally offline and uses sample
+datasets only; it does not connect to your database.
 
 ## NestJS guide
 
