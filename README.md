@@ -145,6 +145,11 @@ docker compose run --rm -e PG_HOST=postgres -e MYSQL_HOST=mysql dev npm test
 docker compose run --rm dev npm run build        # builds all packages
 ```
 
+Build, test, lint, typecheck, API docs and smoke commands are orchestrated by
+Turborepo. Package builds are cached with `dist/**` outputs; GitHub Actions
+restores `.turbo/cache`, and remote Turbo caching can be enabled by configuring
+`TURBO_TOKEN` and `TURBO_TEAM` for the repository.
+
 Coverage is enforced in CI with global thresholds of 90% statements, 85%
 branches, 80% functions, and 90% lines. Local reports are written to
 `coverage/`.

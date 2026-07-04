@@ -9,6 +9,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  TURBO_TELEMETRY_DISABLED: 1
+
 jobs:
   lint-typecheck:
     runs-on: ubuntu-latest
@@ -19,6 +24,14 @@ jobs:
           node-version: 20
           cache: 'npm'
       - run: npm ci
+      - name: Restore Turbo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-lint-typecheck-${{ hashFiles('package-lock.json', 'package.json', 'turbo.json', 'packages/**/package.json', 'packages/**/tsup.config.ts', 'tsconfig*.json', 'vitest.config.ts', 'typedoc.json', '.eslintrc.json') }}
+          restore-keys: |
+            turbo-${{ runner.os }}-lint-typecheck-
+            turbo-${{ runner.os }}-
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run docs:api
@@ -61,6 +74,15 @@ jobs:
           cache: 'npm'
 
       - run: npm ci
+      - name: Restore Turbo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-test-node-${{ matrix.node-version }}-nestjs-${{ matrix.nestjs-version }}-${{ hashFiles('package-lock.json', 'package.json', 'turbo.json', 'packages/**/package.json', 'packages/**/tsup.config.ts', 'tsconfig*.json', 'vitest.config.ts', 'typedoc.json', '.eslintrc.json') }}
+          restore-keys: |
+            turbo-${{ runner.os }}-test-node-${{ matrix.node-version }}-nestjs-${{ matrix.nestjs-version }}-
+            turbo-${{ runner.os }}-test-node-${{ matrix.node-version }}-
+            turbo-${{ runner.os }}-
 
       - name: Override NestJS version
         if: matrix.nestjs-version != '10'
