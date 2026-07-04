@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DataSource } from 'typeorm';
-import { Metrics, MemoryCacheStore, Period } from 'nestjs-metrics-core';
+import { Metrics, MemoryCacheStore, Period, ValidationError } from 'nestjs-metrics-core';
 import type { CacheStore, TrendsResult } from 'nestjs-metrics-core';
 import { planCacheKey } from '@core/cache/cache-key';
 import { defaultCacheStore } from '@core/cache/shared';
@@ -144,7 +144,7 @@ describe('cache — metrics()', () => {
     expect(defaultCacheStore.stats().misses).toBe(2);
   });
 
-  it('respects TTL — stale entries are re-fetched', async () => {
+  it('rejects negative TTL in public cache options', async () => {
     await seedOrders(dataSource, [
       { createdAt: `${year}-01-10 10:00:00` },
     ]);
@@ -152,18 +152,8 @@ describe('cache — metrics()', () => {
     const store = new MemoryCacheStore();
     const opts = { cache: { enabled: true, ttl: -1 } }; // already expired
 
-    await Metrics.query(ordersQuery(dataSource), opts, store)
-      .count()
-      .byMonth()
-      .metrics();
-
-    await Metrics.query(ordersQuery(dataSource), opts, store)
-      .count()
-      .byMonth()
-      .metrics();
-
-    // With ttl=-1, both should have missed (entry already expired when set).
-    expect(store.stats().misses).toBe(2);
+    expect(() => Metrics.query(ordersQuery(dataSource), opts, store)).toThrow(ValidationError);
+    expect(store.stats().misses).toBe(0);
     store.destroy();
   });
 });

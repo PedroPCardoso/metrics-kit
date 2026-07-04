@@ -36,7 +36,7 @@ const WhereConditionSchema: z.ZodType<import('./where').WhereCondition> = z.unio
 ]);
 
 const WhereInputSchema: z.ZodType<import('./where').WhereInput> = z.record(
-  z.string(),
+  IdentifierSchema,
   WhereConditionSchema,
 );
 
@@ -47,7 +47,10 @@ export const MetricsOptionsSchema = z.object({
   cache: z
     .object({
       enabled: z.boolean(),
-      ttl: z.number(),
+      ttl: z
+        .number()
+        .int({ message: 'Cache ttl must be a positive integer number of seconds' })
+        .positive({ message: 'Cache ttl must be a positive integer number of seconds' }),
     })
     .optional(),
 });
@@ -55,7 +58,7 @@ export const MetricsOptionsSchema = z.object({
 /** Zod schema validating {@link ExecutorSpec} passed to `queryExecutor`. */
 export const ExecutorSpecSchema = z.object({
   table: IdentifierSchema,
-  dateColumn: z.string().min(1).optional(),
+  dateColumn: IdentifierSchema.optional(),
   where: WhereInputSchema.optional(),
   from: z.string().min(1).optional(),
 });
