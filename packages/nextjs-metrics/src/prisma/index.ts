@@ -1,5 +1,6 @@
 import {
   MetricsBuilder,
+  type CacheStore,
   type ExecutorSpec,
   type MetricsOptions,
   type Row,
@@ -40,6 +41,7 @@ export function prismaMetrics(
   prisma: PrismaClientLike,
   spec: PrismaMetricsSpec,
   options?: MetricsOptions,
+  cacheStore?: CacheStore,
 ): MetricsBuilder<Record<string, unknown>> {
   const { dialect, ...source } = spec;
   return MetricsBuilder.queryExecutor<Record<string, unknown>>(
@@ -49,5 +51,6 @@ export function prismaMetrics(
     },
     source,
     options,
+    cacheStore,
   );
 }

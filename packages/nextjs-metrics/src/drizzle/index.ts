@@ -2,6 +2,7 @@ import type { Column, Table } from 'drizzle-orm';
 import {
   ConfigurationError,
   MetricsBuilder,
+  type CacheStore,
   type ExecutorSpec,
   type MetricsOptions,
   type Row,
@@ -49,6 +50,7 @@ export function drizzleMetrics(
   db: DrizzleClientLike,
   spec: DrizzleMetricsSpec,
   options?: MetricsOptions,
+  cacheStore?: CacheStore,
 ): MetricsBuilder<Record<string, unknown>> {
   const dialect = resolveDialect(spec);
   const source: ExecutorSpec = {
@@ -61,6 +63,7 @@ export function drizzleMetrics(
     { dialect, execute: drizzleExecutor(dialect, db.$client) },
     source,
     options,
+    cacheStore,
   );
 }
 

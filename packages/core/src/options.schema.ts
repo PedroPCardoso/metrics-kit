@@ -40,24 +40,33 @@ const WhereInputSchema: z.ZodType<import('./where').WhereInput> = z.record(
   WhereConditionSchema,
 );
 
+const CacheOptionsSchema = z.object({
+  enabled: z.boolean(),
+  ttl: z
+    .number()
+    .int({ message: 'Cache ttl must be a positive integer number of seconds' })
+    .positive({ message: 'Cache ttl must be a positive integer number of seconds' }),
+  keyPrefix: z.string().min(1).optional(),
+  logger: z.custom<import('./cache/types').CacheLogger>(
+    (value) => typeof value === 'function',
+    { message: 'Cache logger must be a function' },
+  ).optional(),
+});
+
+const CacheStoreSchema = z.custom<import('./cache/types').CacheStore>(
+  (value) => {
+    if (!value || typeof value !== 'object') return false;
+    const store = value as Record<string, unknown>;
+    return ['get', 'set', 'del', 'clear', 'stats'].every((key) => typeof store[key] === 'function');
+  },
+  { message: 'Cache store must implement get/set/del/clear/stats' },
+);
+
 /** Zod schema validating {@link MetricsOptions} at a builder entry point. */
 export const MetricsOptionsSchema = z.object({
   locale: LocaleSchema.optional(),
   timezone: TimezoneSchema.optional(),
-  cache: z
-    .object({
-      enabled: z.boolean(),
-      ttl: z
-        .number()
-        .int({ message: 'Cache ttl must be a positive integer number of seconds' })
-        .positive({ message: 'Cache ttl must be a positive integer number of seconds' }),
-      keyPrefix: z.string().min(1).optional(),
-      logger: z.custom<import('./cache/types').CacheLogger>(
-        (value) => typeof value === 'function',
-        { message: 'Cache logger must be a function' },
-      ).optional(),
-    })
-    .optional(),
+  cache: CacheOptionsSchema.optional(),
 });
 
 /** Zod schema validating {@link ExecutorSpec} passed to `queryExecutor`. */
@@ -72,6 +81,8 @@ export const ExecutorSpecSchema = z.object({
 export const MetricsModuleOptionsSchema = z.object({
   locale: LocaleSchema.optional(),
   timezone: TimezoneSchema.optional(),
+  cache: CacheOptionsSchema.optional(),
+  cacheStore: CacheStoreSchema.optional(),
 });
 
 /** Per-call options for a metrics query: BCP-47 `locale`, IANA `timezone`, and opt-in `cache`. */
