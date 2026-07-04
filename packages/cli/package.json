@@ -2,7 +2,16 @@
   "name": "@nestjs-metrics/cli",
   "version": "0.1.0",
   "description": "Developer CLI and playground for nestjs-metrics.",
+  "keywords": [
+    "metrics",
+    "cli",
+    "dashboard",
+    "analytics",
+    "playground"
+  ],
+  "author": "Pedro Cardoso",
   "license": "MIT",
+  "sideEffects": false,
   "type": "commonjs",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -24,6 +33,15 @@
   ],
   "engines": {
     "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PedroPCardoso/metrics-kit.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/PedroPCardoso/metrics-kit#readme",
+  "bugs": {
+    "url": "https://github.com/PedroPCardoso/metrics-kit/issues"
   },
   "publishConfig": {
     "access": "public",

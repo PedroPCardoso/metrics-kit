@@ -13,6 +13,7 @@
   ],
   "author": "Pedro Cardoso",
   "license": "MIT",
+  "sideEffects": false,
   "repository": {
     "type": "git",
     "url": "git+https://github.com/PedroPCardoso/metrics-kit.git",

@@ -18,7 +18,7 @@ cd "$TMP"
 npm init -y >/dev/null 2>&1
 npm install --no-audit --no-fund \
   "$CORE_TARBALL" "$NESTJS_TARBALL" "$NEXTJS_TARBALL" \
-  typeorm better-sqlite3 reflect-metadata @nestjs/common @nestjs/core \
+  typeorm better-sqlite3 reflect-metadata @nestjs/common@^10 @nestjs/core@^10 \
   drizzle-orm typescript >/dev/null 2>&1
 
 node smoke.cjs

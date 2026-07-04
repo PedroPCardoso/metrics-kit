@@ -101,3 +101,6 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Smoke test (ESM + CJS + TypeScript resolution)
+        run: npm run smoke
