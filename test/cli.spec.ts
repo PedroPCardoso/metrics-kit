@@ -1,4 +1,5 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { get as httpGet } from 'node:http';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -84,9 +85,19 @@ describe('@nestjs-metrics/cli', () => {
   it('starts the playground on an ephemeral port', async () => {
     const handle = await startPlayground({ port: 0 });
     try {
-      const response = await fetch(handle.url);
-      const html = await response.text();
-      expect(response.status).toBe(200);
+      const html = await new Promise<string>((resolve, reject) => {
+        httpGet(handle.url, (res) => {
+          let body = '';
+          res.setEncoding('utf8');
+          res.on('data', (chunk) => {
+            body += chunk;
+          });
+          res.on('end', () => {
+            if (res.statusCode !== 200) reject(new Error(`HTTP ${res.statusCode}`));
+            else resolve(body);
+          });
+        }).on('error', reject);
+      });
       expect(html).toContain('NestJS Metrics Playground');
     } finally {
       await handle.close();
