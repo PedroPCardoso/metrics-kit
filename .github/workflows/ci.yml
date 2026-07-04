@@ -69,8 +69,8 @@ jobs:
       - name: Wait for databases and load MySQL timezone tables
         run: bash scripts/load-mysql-tz.sh
 
-      - name: Run tests (SQLite + Postgres + MySQL)
-        run: npm test
+      - name: Run tests with coverage (SQLite + Postgres + MySQL)
+        run: npm run coverage:check
         env:
           PG_HOST: localhost
           PG_PORT: 5432

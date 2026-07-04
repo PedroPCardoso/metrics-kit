@@ -13,6 +13,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "coverage:check": "vitest run --coverage",
     "lint": "eslint \"packages/*/src/**/*.ts\" \"test/**/*.ts\"",
     "smoke": "bash scripts/consumer-smoke.sh",
     "docs:api": "typedoc",

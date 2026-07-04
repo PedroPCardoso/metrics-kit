@@ -138,11 +138,16 @@ npm-workspaces monorepo. Everything runs in Docker:
 docker compose run --rm dev npm install
 docker compose run --rm dev npm run typecheck
 docker compose run --rm dev npm test            # SQLite
+docker compose run --rm dev npm run test:coverage
 docker compose up -d --wait postgres mysql
 bash scripts/load-mysql-tz.sh                    # MySQL named timezones (for tz tests)
 docker compose run --rm -e PG_HOST=postgres -e MYSQL_HOST=mysql dev npm test
 docker compose run --rm dev npm run build        # builds all packages
 ```
+
+Coverage is enforced in CI with global thresholds of 90% statements, 85%
+branches, 80% functions, and 90% lines. Local reports are written to
+`coverage/`.
 
 Releases use Changesets — see [docs/RELEASING.md](./docs/RELEASING.md).
 
