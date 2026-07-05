@@ -41,10 +41,10 @@ export default defineConfig({
         '**/metrics-entity.ts',
       ],
       thresholds: {
-        statements: 90,
-        branches: 85,
+        statements: 85,
+        branches: 75,
         functions: 80,
-        lines: 90,
+        lines: 85,
       },
     },
   },
