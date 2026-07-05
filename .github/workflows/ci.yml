@@ -13,8 +13,8 @@ jobs:
   lint-typecheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: 'npm'
@@ -26,11 +26,8 @@ jobs:
     needs: [lint-typecheck]
     strategy:
       matrix:
-        node-version: [18, 20, 22]
+        node-version: [20, 22]
         nestjs-version: [10, 11]
-        exclude:
-          - node-version: 18
-            nestjs-version: 11
       fail-fast: false
     runs-on: ubuntu-latest
     services:
@@ -52,9 +49,9 @@ jobs:
         ports:
           - 3306:3306
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
@@ -62,7 +59,6 @@ jobs:
       - run: npm ci
 
       - name: Override NestJS version
-        if: matrix.nestjs-version != '10'
         run: npm install @nestjs/common@^${{ matrix.nestjs-version }} @nestjs/core@^${{ matrix.nestjs-version }} @nestjs/testing@^${{ matrix.nestjs-version }} --no-save
 
       - name: Wait for databases and load MySQL timezone tables
