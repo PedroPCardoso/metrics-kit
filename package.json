@@ -38,7 +38,7 @@
     "tsup": "^8",
     "typedoc": "^0.28",
     "typeorm": "^0.3",
-    "typescript": "^5",
+    "typescript": "^6",
     "vitest": "^2"
   }
 }
