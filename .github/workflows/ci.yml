@@ -26,11 +26,8 @@ jobs:
     needs: [lint-typecheck]
     strategy:
       matrix:
-        node-version: [18, 20, 22]
+        node-version: [20, 22]
         nestjs-version: [10, 11]
-        exclude:
-          - node-version: 18
-            nestjs-version: 11
       fail-fast: false
     runs-on: ubuntu-latest
     services:
