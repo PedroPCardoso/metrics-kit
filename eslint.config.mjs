@@ -12,4 +12,11 @@ export default [
       '@typescript-eslint/no-explicit-any': 'off',
     },
   },
+  {
+    // require() is intentional here for lazy-loading optional peer deps at runtime
+    files: ['**/drizzle/index.ts'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
 ];

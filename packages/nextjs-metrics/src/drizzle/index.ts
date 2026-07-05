@@ -66,7 +66,6 @@ export function drizzleMetrics(
 
 /** Lazily load drizzle-orm — only needed when a typed table object is passed. */
 function drizzleHelpers(): typeof import('drizzle-orm') {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   return require('drizzle-orm') as typeof import('drizzle-orm');
 }
 
