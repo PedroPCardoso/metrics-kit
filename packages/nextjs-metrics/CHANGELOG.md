@@ -1,5 +1,18 @@
 # nextjs-metrics
 
+## 0.4.0
+
+### Minor Changes
+
+- 50d5812: Add cache controls, safer validation and serialization, dual ESM/CJS package
+  exports, coverage/Turbo CI tooling, and the new metrics CLI with local
+  playground.
+
+### Patch Changes
+
+- Updated dependencies [50d5812]
+  - nestjs-metrics-core@0.3.0
+
 ## 0.3.0
 
 ### Minor Changes
