@@ -39,7 +39,7 @@
     "@types/node": "^20",
     "@typescript-eslint/eslint-plugin": "^8",
     "@typescript-eslint/parser": "^8",
-    "@vitest/coverage-v8": "^2.1.9",
+    "@vitest/coverage-v8": "^4",
     "better-sqlite3": "^11",
     "drizzle-orm": "^0.36",
     "eslint": "^8",
@@ -52,6 +52,6 @@
     "typedoc": "^0.28",
     "typeorm": "^0.3",
     "typescript": "^6",
-    "vitest": "^2"
+    "vitest": "^4"
   }
 }
