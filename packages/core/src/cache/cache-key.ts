@@ -18,8 +18,9 @@ function stableStringify(value: unknown): string {
  * Generate a deterministic cache key from a query plan. The key is a hex
  * digest of the plan shape so identical plans hit the same cache entry.
  */
-export function planCacheKey(plan: QueryPlan): string {
+export function planCacheKey(plan: QueryPlan, keyPrefix?: string): string {
   const payload = stableStringify({
+    source: plan.source,
     select: plan.select,
     where: plan.where,
     groupBy: plan.groupBy,
@@ -28,5 +29,6 @@ export function planCacheKey(plan: QueryPlan): string {
     params: plan.params,
     tz: plan.tz,
   });
-  return createHash('md5').update(payload).digest('hex');
+  const namespace = keyPrefix ? `${keyPrefix}:mk:v1` : 'mk:v1';
+  return `${namespace}:${createHash('md5').update(payload).digest('hex')}`;
 }

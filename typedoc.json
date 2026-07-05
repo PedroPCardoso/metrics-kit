@@ -13,5 +13,6 @@
   "excludeInternal": true,
   "excludePrivate": true,
   "excludeExternals": true,
+  "treatWarningsAsErrors": true,
   "githubPages": false
 }

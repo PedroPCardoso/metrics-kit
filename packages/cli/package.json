@@ -1,31 +1,24 @@
 {
-  "name": "nestjs-metrics-core",
-  "version": "0.2.0",
-  "description": "ORM-agnostic metrics & trends engine. Dual-mode: TypeORM query builder or a raw-SQL executor (Prisma/Drizzle/any driver).",
+  "name": "@nestjs-metrics/cli",
+  "version": "0.1.0",
+  "description": "Developer CLI and playground for nestjs-metrics.",
   "keywords": [
     "metrics",
-    "trends",
-    "charts",
+    "cli",
     "dashboard",
     "analytics",
-    "sql"
+    "playground"
   ],
   "author": "Pedro Cardoso",
   "license": "MIT",
   "sideEffects": false,
-  "homepage": "https://github.com/PedroPCardoso/metrics-kit#readme",
-  "bugs": {
-    "url": "https://github.com/PedroPCardoso/metrics-kit/issues"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/PedroPCardoso/metrics-kit.git",
-    "directory": "packages/core"
-  },
   "type": "commonjs",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "metrics": "./dist/index.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -41,6 +34,15 @@
   "engines": {
     "node": ">=18"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PedroPCardoso/metrics-kit.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/PedroPCardoso/metrics-kit#readme",
+  "bugs": {
+    "url": "https://github.com/PedroPCardoso/metrics-kit/issues"
+  },
   "publishConfig": {
     "access": "public",
     "provenance": true
@@ -50,15 +52,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "luxon": "^3",
-    "zod": "^3"
-  },
-  "peerDependencies": {
-    "typeorm": "^0.3"
-  },
-  "peerDependenciesMeta": {
-    "typeorm": {
-      "optional": true
-    }
+    "commander": "^12.1.0"
   }
 }

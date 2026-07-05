@@ -6,5 +6,9 @@ dist
 # Generated API reference (run `npm run docs:api`)
 docs/api
 
+# Local test/build cache artifacts
+coverage
+.turbo
+
 # Vendored reference implementation (eliseekn/laravel-metrics) — has its own git history.
 laravel-metrics/

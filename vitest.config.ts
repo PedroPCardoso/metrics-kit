@@ -23,5 +23,29 @@ export default defineConfig({
     // External DB specs share one persistent Postgres/MySQL database and
     // reset it per-test; serialize files so they can't truncate each other.
     fileParallelism: false,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html', 'lcov', 'json'],
+      include: ['packages/*/src/**/*.ts'],
+      exclude: [
+        '**/*.d.ts',
+        'packages/core/src/index.ts',
+        'packages/nestjs-metrics/src/index.ts',
+        'packages/nestjs-metrics/src/nestjs/index.ts',
+        'packages/nextjs-metrics/src/index.ts',
+        '**/types.ts',
+        '**/tokens.ts',
+        '**/datasource.ts',
+        '**/query-plan.ts',
+        '**/*interface.ts',
+        '**/metrics-entity.ts',
+      ],
+      thresholds: {
+        statements: 85,
+        branches: 75,
+        functions: 80,
+        lines: 85,
+      },
+    },
   },
 });

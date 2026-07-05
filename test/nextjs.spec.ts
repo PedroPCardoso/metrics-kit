@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { MemoryCacheStore } from 'nestjs-metrics-core';
 import { prismaMetrics, type PrismaClientLike } from 'nextjs-metrics';
 import { drizzleMetrics, type DrizzleClientLike } from 'nextjs-metrics';
 
@@ -51,9 +52,29 @@ describe('nextjs adapters (Prisma + Drizzle over SQLite)', () => {
     expect(await prismaMetrics(prisma, spec).sum('amount').metrics()).toBe(900);
   });
 
+  it('prisma adapter forwards a custom cache store', async () => {
+    const cache = new MemoryCacheStore();
+    const opts = { cache: { enabled: true, ttl: 60 } };
+
+    expect(await prismaMetrics(prisma, spec, opts, cache).count().metrics()).toBe(7);
+    expect(await prismaMetrics(prisma, spec, opts, cache).count().metrics()).toBe(7);
+    expect(cache.stats().hits).toBe(1);
+    cache.destroy();
+  });
+
   it('drizzle adapter: count and sum', async () => {
     expect(await drizzleMetrics(drizzle, spec).count().metrics()).toBe(7);
     expect(await drizzleMetrics(drizzle, spec).sum('amount').metrics()).toBe(900);
+  });
+
+  it('drizzle adapter forwards a custom cache store', async () => {
+    const cache = new MemoryCacheStore();
+    const opts = { cache: { enabled: true, ttl: 60 } };
+
+    expect(await drizzleMetrics(drizzle, spec, opts, cache).count().metrics()).toBe(7);
+    expect(await drizzleMetrics(drizzle, spec, opts, cache).count().metrics()).toBe(7);
+    expect(cache.stats().hits).toBe(1);
+    cache.destroy();
   });
 
   it('structured where flows through both adapters', async () => {

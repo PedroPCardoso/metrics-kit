@@ -99,6 +99,21 @@ describe('input validation & identifier safety', () => {
       expect(() => validateMetricsOptions({ timezone: '' })).toThrow(ValidationError);
     });
 
+    it('rejects invalid cache TTL values', () => {
+      expect(() =>
+        validateMetricsOptions({ cache: { enabled: true, ttl: 0 } }),
+      ).toThrow(ValidationError);
+      expect(() =>
+        validateMetricsOptions({ cache: { enabled: true, ttl: -1 } }),
+      ).toThrow(ValidationError);
+      expect(() =>
+        validateMetricsOptions({ cache: { enabled: true, ttl: Number.NaN } }),
+      ).toThrow(ValidationError);
+      expect(() =>
+        validateMetricsOptions({ cache: { enabled: true, ttl: 1.5 } }),
+      ).toThrow(ValidationError);
+    });
+
     it('rejects non-string locale', () => {
       expect(() => validateMetricsOptions({ locale: 42 as never })).toThrow(ValidationError);
     });
@@ -149,6 +164,12 @@ describe('input validation & identifier safety', () => {
       ).toThrow(ValidationError);
     });
 
+    it('rejects dateColumn with injection', () => {
+      expect(() =>
+        validateExecutorSpec({ table: 'orders', dateColumn: 'created_at; DROP TABLE users' }),
+      ).toThrow(ValidationError);
+    });
+
     it('rejects empty from', () => {
       expect(() =>
         validateExecutorSpec({ table: 'orders', from: '' }),
@@ -162,6 +183,15 @@ describe('input validation & identifier safety', () => {
           where: { status: 'pending', amount: { gte: 100 } },
         }),
       ).not.toThrow();
+    });
+
+    it('rejects where keys with injection', () => {
+      expect(() =>
+        validateExecutorSpec({
+          table: 'orders',
+          where: { 'status; DROP TABLE users': 'pending' },
+        }),
+      ).toThrow(ValidationError);
     });
 
     it('rejects where with non-scalar value', () => {
@@ -197,6 +227,20 @@ describe('input validation & identifier safety', () => {
         expect(() =>
           Metrics.query(ordersQuery(dataSource), { locale: '' as never }),
         ).not.toThrow();
+      } finally {
+        Metrics.skipValidation = false;
+      }
+    });
+
+    it('does not let skipValidation bypass identifier safety', () => {
+      Metrics.skipValidation = true;
+      try {
+        expect(() =>
+          Metrics.queryExecutor(
+            { dialect: 'sqlite', execute: async () => [] },
+            { table: 'orders', dateColumn: 'created_at; DROP TABLE users' },
+          ),
+        ).toThrow(InvalidIdentifierException);
       } finally {
         Metrics.skipValidation = false;
       }

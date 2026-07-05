@@ -14,10 +14,19 @@ runs over TypeORM, Prisma or Drizzle.
 | [`nestjs-metrics-core`](packages/core) | The engine + fluent API. Dual-mode: a TypeORM query builder, or a raw-SQL executor for any driver. | `npm i nestjs-metrics-core` |
 | [`nestjs-metrics`](packages/nestjs-metrics) | The engine (`.`) + a NestJS module (`/nestjs`). | `npm i nestjs-metrics` |
 | [`nextjs-metrics`](packages/nextjs-metrics) | The engine + Prisma & Drizzle adapters, for Next.js / any Node runtime. | `npm i nextjs-metrics` |
+| [`@nestjs-metrics/cli`](packages/cli) | Generators, scaffolds, validation and a local playground. | `npx @nestjs-metrics/cli` |
 
 `nestjs-metrics` and `nextjs-metrics` both depend on `nestjs-metrics-core` — one
 engine, two framework-flavoured packages. The terminals (`metrics()`, `trends()`,
 `metricsWithVariations()`) are **async**.
+
+All packages ship dual CJS/ESM builds. Existing `require(...)` consumers keep
+using `dist/*.js`; ESM consumers resolve `dist/*.mjs` through the `import`
+condition. Physical subpath stubs such as `nestjs-metrics/nestjs` and
+`nextjs-metrics/prisma` are still published so classic TypeScript
+`moduleResolution: "node"` continues to resolve subpaths. Current built `dist`
+sizes are about 464K (`core`), 60K (`nestjs-metrics`) and 112K
+(`nextjs-metrics`).
 
 ## Quick start
 
@@ -68,6 +77,66 @@ See each package's README for the full API. Intentional differences from the
 original Laravel library are in [DIVERGENCES.md](./DIVERGENCES.md); architecture in
 [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
 
+## Caching
+
+Caching is opt-in per query or adapter default. The default store is in-memory;
+custom stores implement the `CacheStore` interface, which is the extension point
+for Redis or other backends.
+
+```typescript
+const cache = new MemoryCacheStore();
+const events: CacheEvent[] = [];
+
+const builder = Metrics.query(qb, {
+  cache: {
+    enabled: true,
+    ttl: 60,
+    keyPrefix: 'tenant-a',
+    logger: (event) => events.push(event), // hit, miss, set, delete
+  },
+}, cache);
+
+await builder.count().metrics();
+await builder.invalidateMetrics(); // bust this metric query
+```
+
+Cache keys include the source table/FROM identity and the built-in `mk:v1`
+namespace. Custom `keyPrefix` values are prepended before that namespace; older
+in-memory keys intentionally miss after the `mk:v1` cache-key format change.
+
+## Identifier safety
+
+Executor specs are validated with Zod for clearer upfront errors, but SQL
+identifier injection is blocked by the builder choke point:
+`assertSafeIdentifier` plus `qualify`. Do not relax that guard because named SQL
+parameters protect values, not table or column identifiers.
+
+## Error codes
+
+All typed errors expose a stable `code`; see
+[docs/ERROR_CODES.md](./docs/ERROR_CODES.md) for the full reference table.
+Serialized errors redact bound SQL `params` by default, while raw params remain
+available in-process through `error.context?.params` for trusted debugging.
+
+## CLI and playground
+
+The optional CLI package provides deterministic code generation and a local
+playground:
+
+```bash
+npx @nestjs-metrics/cli generate service --name OrderMetrics --entity Order
+npx @nestjs-metrics/cli generate dashboard --name Admin --metrics orders,users,revenue
+npx @nestjs-metrics/cli scaffold ecommerce
+npx @nestjs-metrics/cli scaffold saas
+npx @nestjs-metrics/cli scaffold basic
+npx @nestjs-metrics/cli validate
+npx @nestjs-metrics/cli playground
+```
+
+`metrics playground` starts a local HTTP server with sample data, visual controls,
+live preview and generated code. It is intentionally offline and uses sample
+datasets only; it does not connect to your database.
+
 ## NestJS guide
 
 A comprehensive guide covering all features, queries, filters and usage patterns
@@ -97,11 +166,21 @@ npm-workspaces monorepo. Everything runs in Docker:
 docker compose run --rm dev npm install
 docker compose run --rm dev npm run typecheck
 docker compose run --rm dev npm test            # SQLite
+docker compose run --rm dev npm run test:coverage
 docker compose up -d --wait postgres mysql
 bash scripts/load-mysql-tz.sh                    # MySQL named timezones (for tz tests)
 docker compose run --rm -e PG_HOST=postgres -e MYSQL_HOST=mysql dev npm test
 docker compose run --rm dev npm run build        # builds all packages
 ```
+
+Build, test, lint, typecheck, API docs and smoke commands are orchestrated by
+Turborepo. Package builds are cached with `dist/**` outputs; GitHub Actions
+restores `.turbo/cache`, and remote Turbo caching can be enabled by configuring
+`TURBO_TOKEN` and `TURBO_TEAM` for the repository.
+
+Coverage is enforced in CI with global thresholds of 90% statements, 85%
+branches, 80% functions, and 90% lines. Local reports are written to
+`coverage/`.
 
 Releases use Changesets — see [docs/RELEASING.md](./docs/RELEASING.md).
 

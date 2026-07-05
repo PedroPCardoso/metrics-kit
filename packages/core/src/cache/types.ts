@@ -2,7 +2,20 @@
 export interface CacheOptions {
   enabled: boolean;
   ttl: number; // seconds
+  /** Optional namespace inserted before the built-in cache version prefix. */
+  keyPrefix?: string;
+  /** Optional observer for cache activity. No logging happens unless provided. */
+  logger?: CacheLogger;
 }
+
+export type CacheEventType = 'hit' | 'miss' | 'set' | 'delete';
+
+export interface CacheEvent {
+  type: CacheEventType;
+  key: string;
+}
+
+export type CacheLogger = (event: CacheEvent) => void;
 
 /** An entry stored in the cache with an absolute expiration timestamp. */
 export interface CacheEntry<T> {

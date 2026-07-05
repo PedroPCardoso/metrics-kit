@@ -29,7 +29,14 @@ export {
   validateExecutorSpec,
   validateMetricsModuleOptions,
 } from './options.schema';
-export type { CacheOptions, CacheStore, CacheStats } from './cache/types';
+export type {
+  CacheEvent,
+  CacheEventType,
+  CacheLogger,
+  CacheOptions,
+  CacheStore,
+  CacheStats,
+} from './cache/types';
 export { MemoryCacheStore } from './cache/memory-cache.store';
 export { MetricsError } from './exceptions/metrics.error';
 export type { MetricsErrorContext } from './exceptions/metrics.error';

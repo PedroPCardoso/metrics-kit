@@ -9,6 +9,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  TURBO_TELEMETRY_DISABLED: 1
+
 jobs:
   lint-typecheck:
     runs-on: ubuntu-latest
@@ -19,8 +24,17 @@ jobs:
           node-version: 20
           cache: 'npm'
       - run: npm ci
+      - name: Restore Turbo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-lint-typecheck-${{ hashFiles('package-lock.json', 'package.json', 'turbo.json', 'packages/**/package.json', 'packages/**/tsup.config.ts', 'tsconfig*.json', 'vitest.config.ts', 'typedoc.json', '.eslintrc.json') }}
+          restore-keys: |
+            turbo-${{ runner.os }}-lint-typecheck-
+            turbo-${{ runner.os }}-
       - run: npm run lint
       - run: npm run typecheck
+      - run: npm run docs:api
 
   test:
     needs: [lint-typecheck]
@@ -57,6 +71,15 @@ jobs:
           cache: 'npm'
 
       - run: npm ci
+      - name: Restore Turbo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-test-node-${{ matrix.node-version }}-nestjs-${{ matrix.nestjs-version }}-${{ hashFiles('package-lock.json', 'package.json', 'turbo.json', 'packages/**/package.json', 'packages/**/tsup.config.ts', 'tsconfig*.json', 'vitest.config.ts', 'typedoc.json', '.eslintrc.json') }}
+          restore-keys: |
+            turbo-${{ runner.os }}-test-node-${{ matrix.node-version }}-nestjs-${{ matrix.nestjs-version }}-
+            turbo-${{ runner.os }}-test-node-${{ matrix.node-version }}-
+            turbo-${{ runner.os }}-
 
       - name: Override NestJS version
         run: npm install @nestjs/common@^${{ matrix.nestjs-version }} @nestjs/core@^${{ matrix.nestjs-version }} @nestjs/testing@^${{ matrix.nestjs-version }} --no-save
@@ -64,8 +87,8 @@ jobs:
       - name: Wait for databases and load MySQL timezone tables
         run: bash scripts/load-mysql-tz.sh
 
-      - name: Run tests (SQLite + Postgres + MySQL)
-        run: npm test
+      - name: Run tests with coverage (SQLite + Postgres + MySQL)
+        run: npm run coverage:check
         env:
           PG_HOST: localhost
           PG_PORT: 5432
@@ -74,3 +97,6 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Smoke test (ESM + CJS + TypeScript resolution)
+        run: npm run smoke

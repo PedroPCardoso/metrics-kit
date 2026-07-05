@@ -146,5 +146,31 @@ describe('contextual error handling (#31)', () => {
       expect(error.context?.query).toBeTruthy();
       expect((error as { cause?: unknown }).cause).toBeInstanceOf(Error);
     });
+
+    it('redacts params when serialized to JSON', () => {
+      const error = new QueryExecutionError(new Error('driver failed'), {
+        query: 'select * from users where email = ? and token = ?',
+        params: ['secret@example.com', 'token-123'],
+        dialect: 'sqlite',
+        operation: 'execute',
+      });
+
+      const serialized = JSON.stringify(error);
+
+      expect(serialized).toContain('QUERY_EXECUTION_ERROR');
+      expect(serialized).toContain('[REDACTED]');
+      expect(serialized).not.toContain('secret@example.com');
+      expect(serialized).not.toContain('token-123');
+    });
+
+    it('keeps raw params available in-process', () => {
+      const params = ['secret@example.com', 'token-123'];
+      const error = new QueryExecutionError(new Error('driver failed'), {
+        query: 'select * from users where email = ? and token = ?',
+        params,
+      });
+
+      expect(error.context?.params).toBe(params);
+    });
   });
 });

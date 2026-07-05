@@ -1,6 +1,6 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import { ObjectLiteral, SelectQueryBuilder } from 'typeorm';
-import { MetricsBuilder, MetricsOptions } from 'nestjs-metrics-core';
+import { CacheStore, MetricsBuilder, MetricsOptions } from 'nestjs-metrics-core';
 import { METRICS_FEATURE_OPTIONS, METRICS_ROOT_OPTIONS, MetricsModuleOptions } from './tokens';
 
 /**
@@ -38,10 +38,12 @@ export class MetricsService {
   query<T extends ObjectLiteral>(
     qb: SelectQueryBuilder<T>,
     options: MetricsOptions = {},
+    cacheStore?: CacheStore,
   ): MetricsBuilder<T> {
     return MetricsBuilder.query(qb, {
       locale: options.locale ?? this.defaults.locale,
       timezone: options.timezone ?? this.defaults.timezone,
-    });
+      cache: options.cache ?? this.defaults.cache,
+    }, cacheStore ?? this.defaults.cacheStore);
   }
 }

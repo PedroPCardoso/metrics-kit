@@ -44,4 +44,27 @@ export class MetricsError extends Error {
       (this as { cause?: unknown }).cause = options.cause;
     }
   }
+
+  toJSON(): {
+    name: string;
+    message: string;
+    code: string;
+    context?: MetricsErrorContext;
+  } {
+    return {
+      name: this.name,
+      message: this.message,
+      code: this.code,
+      ...(this.context ? { context: redactContext(this.context) } : {}),
+    };
+  }
+}
+
+function redactContext(context: MetricsErrorContext): MetricsErrorContext {
+  return Object.fromEntries(
+    Object.entries(context).map(([key, value]) => [
+      key,
+      key === 'params' ? '[REDACTED]' : value,
+    ]),
+  ) as MetricsErrorContext;
 }
