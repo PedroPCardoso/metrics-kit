@@ -1,14 +1,23 @@
 {
   "name": "nestjs-metrics-core",
   "version": "0.3.0",
-  "description": "ORM-agnostic metrics & trends engine. Dual-mode: TypeORM query builder or a raw-SQL executor (Prisma/Drizzle/any driver).",
+  "description": "ORM-agnostic metrics & trends engine. Build chart-ready time-series from TypeORM, Prisma, Drizzle or any SQL driver via a fluent API.",
   "keywords": [
     "metrics",
     "trends",
     "charts",
     "dashboard",
     "analytics",
-    "sql"
+    "sql",
+    "fluent-api",
+    "typeorm",
+    "prisma",
+    "drizzle",
+    "postgresql",
+    "mysql",
+    "sqlite",
+    "time-series",
+    "typescript"
   ],
   "author": "Pedro Cardoso",
   "license": "MIT",
@@ -36,7 +45,9 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=18"
