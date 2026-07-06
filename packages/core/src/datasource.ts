@@ -6,8 +6,8 @@ export type Row = Record<string, unknown>;
 /** Execute a parameterized SQL statement and return the raw rows. */
 export type SqlExecutor = (sql: string, params: unknown[]) => Promise<Row[]>;
 
-/** The three SQL dialects the executor mode emits for. */
-export type SupportedDialect = 'postgres' | 'mysql' | 'sqlite';
+/** The SQL dialects the executor mode emits for. */
+export type SupportedDialect = 'postgres' | 'mysql' | 'sqlite' | 'mssql';
 
 /**
  * The ORM-agnostic execution boundary. An adapter (Prisma, Drizzle, …) supplies
