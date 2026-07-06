@@ -20,6 +20,19 @@ export interface GroupedTrendsResult {
   };
 }
 
+/**
+ * Two aligned trend series: the current window side by side with a shifted
+ * comparison window, sharing a single label axis.
+ */
+export interface TrendsComparisonResult {
+  /** Shared bucket labels for both series, in chart order. */
+  labels: (string | number)[];
+  /** Aggregate values for the current (unshifted) window. */
+  current: number[];
+  /** Aggregate values for the shifted comparison window. */
+  previous: number[];
+}
+
 /** A metric plus its variation against a prior period. */
 export interface VariationResult {
   /** The current period's aggregate value. */
