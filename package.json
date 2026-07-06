@@ -8,7 +8,9 @@
     "packages/core",
     "packages/cli",
     "packages/nestjs-metrics",
-    "packages/nextjs-metrics"
+    "packages/nextjs-metrics",
+    "examples/nestjs-dashboard",
+    "examples/nextjs-dashboard"
   ],
   "scripts": {
     "build": "turbo run build",

@@ -1,0 +1,30 @@
+{
+  "name": "nestjs-dashboard-demo",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/main.js",
+    "dev": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11",
+    "class-transformer": "^0.5",
+    "class-validator": "^0.14",
+    "luxon": "^3",
+    "nestjs-metrics": "*",
+    "@nestjs/common": "^10",
+    "@nestjs/core": "^10",
+    "@nestjs/platform-express": "^10",
+    "reflect-metadata": "^0.2",
+    "rxjs": "^7",
+    "typeorm": "^0.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7",
+    "@types/luxon": "^3",
+    "@types/node": "^20",
+    "tsx": "^4",
+    "typescript": "^5"
+  }
+}

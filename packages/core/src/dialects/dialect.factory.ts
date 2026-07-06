@@ -1,4 +1,5 @@
 import { ConfigurationError } from '../exceptions/configuration.exception';
+import { MssqlDialect } from './mssql.dialect';
 import { MySqlDialect } from './mysql.dialect';
 import { PostgresDialect } from './postgres.dialect';
 import { SqlDialect } from './sql-dialect.interface';
@@ -17,10 +18,12 @@ export function dialectFor(driverType: string): SqlDialect {
     case 'mysql':
     case 'mariadb':
       return new MySqlDialect();
+    case 'mssql':
+      return new MssqlDialect();
     default:
       throw new ConfigurationError(
         `nestjs-metrics: unsupported database driver "${driverType}"`,
-        'Use one of: sqlite, better-sqlite3, postgres, mysql, mariadb.',
+        'Use one of: sqlite, better-sqlite3, postgres, mysql, mariadb, mssql.',
         { dialect: driverType },
       );
   }
