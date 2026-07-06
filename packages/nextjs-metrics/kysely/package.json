@@ -1,0 +1,5 @@
+{
+  "main": "../dist/kysely/index.js",
+  "module": "../dist/kysely/index.mjs",
+  "types": "../dist/kysely/index.d.ts"
+}
