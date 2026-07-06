@@ -1,5 +1,13 @@
 # nextjs-metrics
 
+## 0.4.1
+
+### Patch Changes
+
+- e4db44a: Improve SEO, positioning and developer experience: rewrite READMEs with badges, hero sections, feature lists and honest comparison tables; expand package.json keywords and descriptions; add production checklist and comparison docs; add runnable examples for NestJS/TypeORM, Next.js/Prisma and Next.js/Drizzle.
+- Updated dependencies [e4db44a]
+  - nestjs-metrics-core@0.3.1
+
 ## 0.4.0
 
 ### Minor Changes
