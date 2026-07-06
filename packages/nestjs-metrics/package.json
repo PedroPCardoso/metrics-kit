@@ -1,7 +1,7 @@
 {
   "name": "nestjs-metrics",
   "version": "0.4.0",
-  "description": "Generate metrics and trends from your TypeORM entities for your dashboards, with a NestJS module. (Built on nestjs-metrics-core.)",
+  "description": "Generate chart-ready metrics and trends from your TypeORM entities in NestJS. Fluent API, locale/timezone-aware bucketing, PostgreSQL/MySQL/SQLite.",
   "keywords": [
     "nestjs",
     "typeorm",
@@ -9,7 +9,14 @@
     "trends",
     "charts",
     "dashboard",
-    "analytics"
+    "analytics",
+    "time-series",
+    "fluent-api",
+    "laravel-metrics",
+    "postgresql",
+    "mysql",
+    "sqlite",
+    "typescript"
   ],
   "author": "Pedro Cardoso",
   "license": "MIT",
@@ -44,7 +51,9 @@
   },
   "files": [
     "dist",
-    "nestjs"
+    "nestjs",
+    "README.md",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=18"

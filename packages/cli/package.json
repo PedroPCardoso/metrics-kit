@@ -1,13 +1,17 @@
 {
   "name": "@nestjs-metrics/cli",
   "version": "0.2.0",
-  "description": "Developer CLI and playground for nestjs-metrics.",
+  "description": "CLI, generators and offline playground for nestjs-metrics. Scaffold dashboards, validate projects and preview metrics locally.",
   "keywords": [
+    "nestjs",
     "metrics",
     "cli",
     "dashboard",
     "analytics",
-    "playground"
+    "playground",
+    "scaffold",
+    "generator",
+    "typescript"
   ],
   "author": "Pedro Cardoso",
   "license": "MIT",
@@ -29,7 +33,9 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=18"
