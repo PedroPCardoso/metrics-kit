@@ -55,6 +55,14 @@ export class ExecutorBackend implements QueryBackend {
     return rows.map((row) => this.normalizeRow(row));
   }
 
+  toSql(plan: QueryPlan, mask = false): string {
+    const { sql, params } = this.assemble(plan);
+    if (mask) {
+      return this.redact(sql, params);
+    }
+    return this.interpolate(sql, params);
+  }
+
   private assemble(plan: QueryPlan): { sql: string; params: unknown[] } {
     const distinct = plan.distinct ? 'DISTINCT ' : '';
     const projection = plan.select
@@ -72,6 +80,29 @@ export class ExecutorBackend implements QueryBackend {
       sql += ` ORDER BY ${plan.orderBy.expr} ${plan.orderBy.dir}`;
     }
     return this.bind(sql, plan.params);
+  }
+
+  private interpolate(sql: string, params: unknown[]): string {
+    let idx = 0;
+    return sql.replace(/\$(\d+)|\?/g, () => {
+      const value = params[idx++];
+      return this.formatValue(value);
+    });
+  }
+
+  private formatValue(value: unknown): string {
+    if (value === null || value === undefined) return 'NULL';
+    if (typeof value === 'number') return String(value);
+    if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
+    return `'${String(value).replace(/'/g, "''")}'`;
+  }
+
+  private redact(sql: string, params: unknown[]): string {
+    let idx = 0;
+    return sql.replace(/\$(\d+)|\?/g, () => {
+      idx++;
+      return typeof params[idx - 1] === 'number' ? '0' : "'[REDACTED]'";
+    });
   }
 
   /** Replace each `:name` with the dialect's positional placeholder, in order. */

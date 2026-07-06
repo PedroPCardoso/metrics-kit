@@ -715,6 +715,30 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return normalizeData(rows[0]?.data);
   }
 
+  /**
+   * Return the SQL string the {@link metrics} terminal method would execute,
+   * without actually running it. Parameter values are shown inline; pass
+   * `{ mask: true }` to redact them with `'[REDACTED]'`.
+   *
+   * @param options - When `mask` is true parameter values are redacted.
+   * @returns The rendered SQL with bound parameter values.
+   */
+  toSql(options?: { mask?: boolean }): string {
+    return this.backend.toSql(this.metricsPlan(), options?.mask);
+  }
+
+  /**
+   * Return the SQL string the {@link trends} terminal method would execute,
+   * without actually running it. Parameter values are shown inline; pass
+   * `{ mask: true }` to redact them with `'[REDACTED]'`.
+   *
+   * @param options - When `mask` is true parameter values are redacted.
+   * @returns The rendered SQL with bound parameter values.
+   */
+  toTrendsSql(options?: { mask?: boolean }): string {
+    return this.backend.toSql(this.trendsPlan(), options?.mask);
+  }
+
   /** Remove the cached entry for the current single-metric query shape. */
   async invalidateMetrics(): Promise<void> {
     this.invalidateCache(this.metricsPlan());
