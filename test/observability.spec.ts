@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { MetricsBuilder, QueryEvent, OnQueryHandler } from 'nestjs-metrics-core';
-import { Aggregate, Period } from 'nestjs-metrics-core';
+import { Period } from 'nestjs-metrics-core';
 import { validateMetricsOptions, validateMetricsModuleOptions } from 'nestjs-metrics-core';
 
 function fakeBackend(dialect: string = 'postgres', rows: Record<string, unknown>[] = [{ data: 42, label: 'Jan' }]) {
@@ -73,7 +73,7 @@ describe('observability — onQuery', () => {
     );
     builder.count('id');
 
-    const result = await builder.metricsWithVariations(1, Period.DAY);
+    await builder.metricsWithVariations(1, Period.DAY);
     // metricsWithVariations calls metrics() twice, so we get 3 events total
     expect(events.length).toBeGreaterThanOrEqual(1);
     const variationsEvent = events.find((e) => e.terminal === 'variations');
