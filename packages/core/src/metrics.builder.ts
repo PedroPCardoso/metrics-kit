@@ -25,7 +25,8 @@ import {
   toPercent,
 } from './formatting/trends.formatter';
 import { gapFillRaw, populate, presentIntegerLabels } from './formatting/missing-data';
-import { GroupedTrendsResult, MetricsOptions, TrendsResult, VariationResult } from './types';
+import { GroupedTrendsResult, MetricsOptions, TrendsResult, VariationResult, OnQueryHandler } from './types';
+import { MetricsError } from './exceptions/metrics.error';
 import { PERIOD_TO_DATE_PART, toTrendRow, isRecord } from './types/helpers';
 import type { CacheOptions, CacheStore } from './cache/types';
 import { planCacheKey } from './cache/cache-key';
@@ -91,6 +92,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   private groupedAggregate: Aggregate = Aggregate.SUM;
   private caching: CacheOptions | null = null;
   private cacheStore: CacheStore | undefined;
+  private onQueryHandler: OnQueryHandler | undefined;
   private now = new Date();
   private year: number = this.now.getFullYear();
   private month: number = this.now.getMonth() + 1;
@@ -120,6 +122,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
       this.caching = options.cache;
       this.cacheStore = cacheStore ?? defaultCacheStore;
     }
+    this.onQueryHandler = (options as Record<string, unknown>).onQuery as OnQueryHandler | undefined;
     this.column = this.qualify('id');
     this.dateColumnRef = this.qualify('created_at');
   }
@@ -157,6 +160,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     clone.extraFilters = this.extraFilters;
     clone.caching = this.caching;
     clone.cacheStore = this.cacheStore;
+    clone.onQueryHandler = this.onQueryHandler;
     return clone;
   }
 
@@ -711,8 +715,18 @@ export class MetricsBuilder<T extends ObjectLiteral> {
    */
   async metrics(): Promise<number> {
     const plan = this.metricsPlan();
-    const rows = await this.withCache(plan, () => this.backend.run(plan));
-    return normalizeData(rows[0]?.data);
+    const startMs = Date.now();
+    try {
+      const rows = await this.withCache(plan, () => this.backend.run(plan));
+      const result = normalizeData(rows[0]?.data);
+      this.emitQueryEvent('metrics', this._lastCacheStatus, startMs, plan);
+      return result;
+    } catch (err) {
+      const metricsErr = err as MetricsError | undefined;
+      const code = metricsErr instanceof MetricsError ? metricsErr.code : 'QUERY_EXECUTION_ERROR';
+      this.emitQueryEvent('metrics', this._lastCacheStatus, startMs, plan, { code });
+      throw err;
+    }
   }
 
   /**
@@ -781,26 +795,37 @@ export class MetricsBuilder<T extends ObjectLiteral> {
       throw new InvalidVariationsCountException();
     }
 
-    const previous = this.baseClone();
-    previous.period = previousPeriod;
-    previous.windowCount = previousCount;
-    shiftReference(previous, previousPeriod, previousCount);
+    const plan = this.metricsPlan();
+    const startMs = Date.now();
 
-    const count = await this.metrics();
-    const prior = await previous.metrics();
+    try {
+      const previous = this.baseClone();
+      previous.period = previousPeriod;
+      previous.windowCount = previousCount;
+      shiftReference(previous, previousPeriod, previousCount);
 
-    const diff = count - prior;
-    const type = diff > 0 ? 'increase' : diff < 0 ? 'decrease' : 'none';
+      const count = await this.metrics();
+      const prior = await previous.metrics();
 
-    let value: number | string = Math.abs(diff);
-    if (type !== 'none' && inPercent && prior > 0) {
-      value = `${Math.round((Math.abs(diff) / prior) * 100 * 100) / 100}%`;
+      const diff = count - prior;
+      const type = diff > 0 ? 'increase' : diff < 0 ? 'decrease' : 'none';
+
+      let value: number | string = Math.abs(diff);
+      if (type !== 'none' && inPercent && prior > 0) {
+        value = `${Math.round((Math.abs(diff) / prior) * 100 * 100) / 100}%`;
+      }
+      if (type === 'none') {
+        value = 0;
+      }
+
+      this.emitQueryEvent('variations', this._lastCacheStatus, startMs, plan);
+      return { count, variation: { type, value } };
+    } catch (err) {
+      const metricsErr = err as MetricsError | undefined;
+      const code = metricsErr instanceof MetricsError ? metricsErr.code : 'QUERY_EXECUTION_ERROR';
+      this.emitQueryEvent('variations', this._lastCacheStatus, startMs, plan, { code });
+      throw err;
     }
-    if (type === 'none') {
-      value = 0;
-    }
-
-    return { count, variation: { type, value } };
   }
 
   /**
@@ -819,28 +844,36 @@ export class MetricsBuilder<T extends ObjectLiteral> {
    * ```
    */
   async trends(inPercent = false): Promise<TrendsResult | GroupedTrendsResult> {
-    if (this.groupedLabels.length > 0) {
-      return this.groupedTrends(inPercent);
-    }
-
-    const rows = await this.trendsData();
-    const formatter = new TrendsFormatter(new LabelFormatter(this.locale));
-    const ctx = { year: this.year, month: this.month };
-
-    let series: TrendsResult;
-    if (this.fill && this.isPeriodMode()) {
-      // Date periods: fill the integer buckets, then format the labels.
-      series = formatter.format(gapFillRaw(rows, this.missingValue), this.period, ctx);
-    } else {
-      // Category (labelColumn) and range labels are already final strings.
-      const labelPeriod = this.labelColumnName || this.range ? null : this.period;
-      series = formatter.format(rows, labelPeriod, ctx);
-      if (this.fill) {
-        series = populate(await this.canonicalLabels(), series, this.missingValue);
+    const plan = this.trendsPlan();
+    const startMs = Date.now();
+    try {
+      let result: TrendsResult | GroupedTrendsResult;
+      if (this.groupedLabels.length > 0) {
+        result = await this.groupedTrends(inPercent);
+      } else {
+        const rows = await this.trendsData();
+        const formatter = new TrendsFormatter(new LabelFormatter(this.locale));
+        const ctx = { year: this.year, month: this.month };
+        let series: TrendsResult;
+        if (this.fill && this.isPeriodMode()) {
+          series = formatter.format(gapFillRaw(rows, this.missingValue), this.period, ctx);
+        } else {
+          const labelPeriod = this.labelColumnName || this.range ? null : this.period;
+          series = formatter.format(rows, labelPeriod, ctx);
+          if (this.fill) {
+            series = populate(await this.canonicalLabels(), series, this.missingValue);
+          }
+        }
+        result = inPercent ? toPercent(series) : series;
       }
+      this.emitQueryEvent('trends', this._lastCacheStatus, startMs, plan);
+      return result;
+    } catch (err) {
+      const metricsErr = err as MetricsError | undefined;
+      const code = metricsErr instanceof MetricsError ? metricsErr.code : 'QUERY_EXECUTION_ERROR';
+      this.emitQueryEvent('trends', this._lastCacheStatus, startMs, plan, { code });
+      throw err;
     }
-
-    return inPercent ? toPercent(series) : series;
   }
 
   /** Remove the cached entry for the current trends query shape. */
@@ -1084,20 +1117,26 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     );
   }
 
+  /** Cache status of the most recent withCache call — read by terminals to populate QueryEvent.cache. */
+  private _lastCacheStatus: import('./types').QueryEvent['cache'] = 'off';
+
   /**
    * Execute the callback, returning a cached value when available for the
    * given query plan. A no-op when caching is not enabled on this builder.
    */
   private async withCache<T>(plan: QueryPlan, execute: () => Promise<T>): Promise<T> {
     if (!this.caching || !this.cacheStore) {
+      this._lastCacheStatus = 'off';
       return execute();
     }
     const key = planCacheKey(plan, this.caching.keyPrefix);
     const cached = this.cacheStore.get<T>(key);
     if (cached !== undefined) {
+      this._lastCacheStatus = 'hit';
       this.logCache('hit', key);
       return cached;
     }
+    this._lastCacheStatus = 'miss';
     this.logCache('miss', key);
     const result = await execute();
     this.cacheStore.set(key, result, this.caching.ttl);
@@ -1116,6 +1155,38 @@ export class MetricsBuilder<T extends ObjectLiteral> {
 
   private logCache(type: 'hit' | 'miss' | 'set' | 'delete', key: string): void {
     this.caching?.logger?.({ type, key });
+  }
+
+  /**
+   * Fire-and-forget: call the onQuery observer with a {@link QueryEvent}. Hook
+   * failures are swallowed so a broken logger never breaks a dashboard query;
+   * the first failure is surfaced via `console.warn`.
+   */
+  private emitQueryEvent(
+    terminal: import('./types').QueryEvent['terminal'],
+    cache: import('./types').QueryEvent['cache'],
+    startMs: number,
+    plan: QueryPlan,
+    error?: { code: string },
+  ): void {
+    if (!this.onQueryHandler) return;
+    try {
+      const sql = this.backend.toSql(plan, true);
+      this.onQueryHandler({
+        sql,
+        durationMs: Date.now() - startMs,
+        dialect: this.dialect.driverType,
+        backend: this.backend instanceof TypeOrmBackend ? 'typeorm' : 'executor',
+        terminal,
+        cache,
+        ...(error ? { error } : {}),
+      });
+    } catch (hookError) {
+      console.warn(
+        '[nestjs-metrics] onQuery observer threw; swallowed to protect the query path.',
+        hookError,
+      );
+    }
   }
 }
 

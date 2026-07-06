@@ -2,6 +2,8 @@ import { Aggregate } from '../enums/aggregate.enum';
 import { DatePart, SqlDialect } from './sql-dialect.interface';
 
 export class SqliteDialect implements SqlDialect {
+  readonly driverType = 'sqlite';
+
   aggregate(fn: Aggregate, column: string): string {
     return `${fn}(${column})`;
   }

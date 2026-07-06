@@ -17,6 +17,8 @@ export type {
   TrendsResult,
   GroupedTrendsResult,
   VariationResult,
+  QueryEvent,
+  OnQueryHandler,
   MetricsOptions,
 } from './types';
 export type { MetricsModuleOptions } from './options.schema';

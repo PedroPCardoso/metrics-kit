@@ -62,11 +62,17 @@ const CacheStoreSchema = z.custom<import('./cache/types').CacheStore>(
   { message: 'Cache store must implement get/set/del/clear/stats' },
 );
 
+const OnQuerySchema = z.custom<import('./types').OnQueryHandler>(
+  (value) => typeof value === 'function',
+  { message: 'onQuery must be a function accepting a QueryEvent' },
+);
+
 /** Zod schema validating {@link MetricsOptions} at a builder entry point. */
 export const MetricsOptionsSchema = z.object({
   locale: LocaleSchema.optional(),
   timezone: TimezoneSchema.optional(),
   cache: CacheOptionsSchema.optional(),
+  onQuery: OnQuerySchema.optional(),
 });
 
 /** Zod schema validating {@link ExecutorSpec} passed to `queryExecutor`. */
@@ -83,6 +89,7 @@ export const MetricsModuleOptionsSchema = z.object({
   timezone: TimezoneSchema.optional(),
   cache: CacheOptionsSchema.optional(),
   cacheStore: CacheStoreSchema.optional(),
+  onQuery: OnQuerySchema.optional(),
 });
 
 /** Per-call options for a metrics query: BCP-47 `locale`, IANA `timezone`, and opt-in `cache`. */
