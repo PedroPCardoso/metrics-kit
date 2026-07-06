@@ -9,6 +9,7 @@ export default defineConfig({
   resolve: {
     alias: [
       { find: /^nestjs-metrics-core$/, replacement: r('packages/core/src/index.ts') },
+      { find: /^nestjs-metrics-core\/(.*)$/, replacement: r('packages/core/src') + '/$1' },
       { find: /^nestjs-metrics\/nestjs$/, replacement: r('packages/nestjs-metrics/src/nestjs/index.ts') },
       { find: /^nestjs-metrics$/, replacement: r('packages/nestjs-metrics/src/index.ts') },
       { find: /^nextjs-metrics\/prisma$/, replacement: r('packages/nextjs-metrics/src/prisma/index.ts') },
