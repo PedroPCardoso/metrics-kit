@@ -8,7 +8,10 @@ export type DatePart = 'day' | 'week' | 'month' | 'year';
  * from a date column. One implementation exists per supported driver.
  */
 export interface SqlDialect {
-  /** e.g. `count(orders.id)`, `sum(orders.amount)`. */
+  /**
+   * Render a SQL aggregate expression.
+   * e.g. `count(orders.id)`, `sum(orders.amount)`, `count(DISTINCT orders.id)`.
+   */
   aggregate(fn: Aggregate, column: string): string;
 
   /** Integer extraction of a date part, e.g. the month number of a column. */

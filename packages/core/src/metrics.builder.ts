@@ -256,6 +256,16 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return this.aggregate(Aggregate.COUNT, column);
   }
 
+  /**
+   * Aggregate by counting distinct values in a column (`COUNT(DISTINCT ...)`).
+   * @param column - Column to count distinct values of (default `id`).
+   * @returns This builder, for chaining.
+   * @throws {@link InvalidIdentifierException} when `column` is not a plain SQL identifier.
+   */
+  countDistinct(column = 'id'): this {
+    return this.aggregate(Aggregate.COUNT_DISTINCT, column);
+  }
+
   // --- Targeting ----------------------------------------------------------
 
   /**
@@ -554,6 +564,26 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return this.count(column).byYear(count);
   }
 
+  /** Shorthand for {@link countDistinct} + {@link byDay}. */
+  countDistinctByDay(column = 'id', count = 0): this {
+    return this.countDistinct(column).byDay(count);
+  }
+
+  /** Shorthand for {@link countDistinct} + {@link byWeek}. */
+  countDistinctByWeek(column = 'id', count = 0): this {
+    return this.countDistinct(column).byWeek(count);
+  }
+
+  /** Shorthand for {@link countDistinct} + {@link byMonth}. */
+  countDistinctByMonth(column = 'id', count = 0): this {
+    return this.countDistinct(column).byMonth(count);
+  }
+
+  /** Shorthand for {@link countDistinct} + {@link byYear}. */
+  countDistinctByYear(column = 'id', count = 0): this {
+    return this.countDistinct(column).byYear(count);
+  }
+
   /** Shorthand for {@link sum} + {@link byDay}. */
   sumByDay(column: string, count = 0): this {
     return this.sum(column).byDay(count);
@@ -651,6 +681,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return this.count(column).between(start, end);
   }
 
+  /** Shorthand for {@link countDistinct} + {@link between}. */
+  countDistinctBetween([start, end]: [string, string], column = 'id'): this {
+    return this.countDistinct(column).between(start, end);
+  }
+
   /** Shorthand for {@link sum} + {@link between}. */
   sumBetween([start, end]: [string, string], column: string): this {
     return this.sum(column).between(start, end);
@@ -674,6 +709,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   /** Shorthand for {@link count} + {@link from}. */
   countFrom(date: string, column = 'id'): this {
     return this.count(column).from(date);
+  }
+
+  /** Shorthand for {@link countDistinct} + {@link from}. */
+  countDistinctFrom(date: string, column = 'id'): this {
+    return this.countDistinct(column).from(date);
   }
 
   /** Shorthand for {@link sum} + {@link from}. */
