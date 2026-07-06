@@ -59,7 +59,7 @@ const CacheStoreSchema = z.custom<import('./cache/types').CacheStore>(
     const store = value as Record<string, unknown>;
     return ['get', 'set', 'del', 'clear', 'stats'].every((key) => typeof store[key] === 'function');
   },
-  { message: 'Cache store must implement get/set/del/clear/stats' },
+  { message: 'Cache store must implement get/set/del/clear/stats (sync or async)' },
 );
 
 /** Zod schema validating {@link MetricsOptions} at a builder entry point. */
