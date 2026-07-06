@@ -52,8 +52,8 @@ describe('async CacheStore contract', () => {
         if (key.includes('mk:v1')) return [{ data: 77 }] as unknown as T;
         return undefined;
       },
-      async set<T>(_key: string, _value: T, _ttl: number): Promise<void> {},
-      async del(_key: string): Promise<void> {},
+      async set(): Promise<void> {},
+      async del(): Promise<void> {},
       async clear(): Promise<void> {},
       stats(): CacheStats {
         return { hits: 0, misses: 0, size: 0 };
@@ -75,13 +75,13 @@ describe('async CacheStore contract', () => {
   it('async store miss falls through to execution', async () => {
     let setCalled = false;
     const asyncStore: CacheStore = {
-      async get<T>(_key: string): Promise<T | undefined> {
+      async get<T>(): Promise<T | undefined> {
         return undefined;
       },
-      async set<T>(_key: string, _value: T, _ttl: number): Promise<void> {
+      async set(): Promise<void> {
         setCalled = true;
       },
-      async del(_key: string): Promise<void> {},
+      async del(): Promise<void> {},
       async clear(): Promise<void> {},
       stats(): CacheStats {
         return { hits: 0, misses: 0, size: 0 };
@@ -104,10 +104,10 @@ describe('async CacheStore contract', () => {
   it('invalidateCache awaits async del', async () => {
     let deletedKey = '';
     const asyncStore: CacheStore = {
-      async get<T>(_key: string): Promise<T | undefined> {
+      async get<T>(): Promise<T | undefined> {
         return undefined;
       },
-      async set<T>(_key: string, _value: T, _ttl: number): Promise<void> {},
+      async set(): Promise<void> {},
       async del(key: string): Promise<void> {
         deletedKey = key;
       },
@@ -138,7 +138,7 @@ describe('createCacheManagerStore', () => {
       async get<T>(key: string): Promise<T | undefined> {
         return map.get(key) as T | undefined;
       },
-      async set(key: string, value: unknown, _ttlMs?: number): Promise<void> {
+      async set(key: string, value: unknown): Promise<void> {
         map.set(key, value);
       },
       async del(key: string): Promise<void> {
@@ -165,7 +165,7 @@ describe('createCacheManagerStore', () => {
       async get<T>(key: string): Promise<T | undefined> {
         return map.get(key) as T | undefined;
       },
-      async set(key: string, value: unknown, _ttlMs?: number): Promise<void> {
+      async set(key: string, value: unknown): Promise<void> {
         map.set(key, value);
       },
       async del(key: string): Promise<void> {
@@ -193,7 +193,7 @@ describe('createCacheManagerStore', () => {
       async get<T>(key: string): Promise<T | undefined> {
         return map.get(key) as T | undefined;
       },
-      async set(key: string, value: unknown, _ttlMs?: number): Promise<void> {
+      async set(key: string, value: unknown): Promise<void> {
         map.set(key, value);
       },
       async del(key: string): Promise<void> {
