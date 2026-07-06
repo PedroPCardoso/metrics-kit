@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
 import { DateTime } from 'luxon';
+import { describe, expect, it } from 'vitest';
 import { PeriodResolver } from '@core/dates/period-resolver';
 
 /**
@@ -57,6 +57,25 @@ describe('PeriodResolver window bounds', () => {
     it('clamps to the first week of the month when the window is larger', () => {
       const r = new PeriodResolver({ year: 2026, month: 3, day: 1, week: 9 }, 5, now);
       expect(r.weekPeriod()).toEqual([9, 9]);
+    });
+  });
+
+  describe('hourPeriod', () => {
+    const now = DateTime.fromObject({ year: 2026, month: 6, day: 23 });
+
+    it('returns [hour-n .. hour] when the window fits in the day', () => {
+      const r = new PeriodResolver({ year: 2026, month: 6, day: 23, week: 26, hour: 14 }, 3, now);
+      expect(r.hourPeriod()).toEqual([11, 14]);
+    });
+
+    it('clamps to hour 0 when the window is larger than the current hour', () => {
+      const r = new PeriodResolver({ year: 2026, month: 6, day: 23, week: 26, hour: 2 }, 5, now);
+      expect(r.hourPeriod()).toEqual([0, 2]);
+    });
+
+    it('uses hour 23 for a past reference day', () => {
+      const r = new PeriodResolver({ year: 2026, month: 6, day: 15, week: 25, hour: 10 }, 3, now);
+      expect(r.hourPeriod()).toEqual([20, 23]);
     });
   });
 });

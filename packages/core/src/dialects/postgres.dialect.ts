@@ -8,6 +8,8 @@ export class PostgresDialect implements SqlDialect {
 
   periodExpr(part: DatePart, column: string): string {
     switch (part) {
+      case 'hour':
+        return `EXTRACT(HOUR FROM ${column})`;
       case 'day':
         return `EXTRACT(DAY FROM ${column})`;
       case 'week':
@@ -22,6 +24,8 @@ export class PostgresDialect implements SqlDialect {
 
   dateBucket(part: DatePart, column: string): string {
     switch (part) {
+      case 'hour':
+        return `to_char(${column}, 'YYYY-MM-DD HH24:00')`;
       case 'day':
         return `to_char(${column}, 'YYYY-MM-DD')`;
       case 'month':

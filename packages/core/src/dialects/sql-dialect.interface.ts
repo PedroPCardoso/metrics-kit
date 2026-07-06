@@ -1,6 +1,6 @@
 import { Aggregate } from '../enums/aggregate.enum';
 
-export type DatePart = 'day' | 'week' | 'month' | 'year';
+export type DatePart = 'hour' | 'day' | 'week' | 'month' | 'year';
 
 /**
  * A SqlDialect knows how to express the database-specific SQL fragments the

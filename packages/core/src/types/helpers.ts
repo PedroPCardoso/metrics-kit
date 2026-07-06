@@ -10,6 +10,7 @@ import { Row } from '../datasource';
  */
 export const PERIOD_TO_DATE_PART: Readonly<Record<Period, DatePart>> = {
   [Period.TODAY]: 'day',
+  [Period.HOUR]: 'hour',
   [Period.DAY]: 'day',
   [Period.WEEK]: 'week',
   [Period.MONTH]: 'month',
