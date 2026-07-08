@@ -1,6 +1,6 @@
 {
   "name": "nestjs-metrics-core",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "ORM-agnostic metrics & trends engine. Build chart-ready time-series from TypeORM, Prisma, Drizzle or any SQL driver via a fluent API.",
   "keywords": [
     "metrics",
