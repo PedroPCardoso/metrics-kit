@@ -44,6 +44,7 @@ export class MetricsService {
       locale: options.locale ?? this.defaults.locale,
       timezone: options.timezone ?? this.defaults.timezone,
       cache: options.cache ?? this.defaults.cache,
-    }, cacheStore ?? this.defaults.cacheStore);
+      onQuery: (options as Record<string, unknown>).onQuery ?? this.defaults.onQuery,
+    } as MetricsOptions, cacheStore ?? this.defaults.cacheStore);
   }
 }

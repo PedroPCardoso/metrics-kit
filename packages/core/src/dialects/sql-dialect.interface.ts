@@ -8,6 +8,9 @@ export type DatePart = 'day' | 'week' | 'month' | 'year';
  * from a date column. One implementation exists per supported driver.
  */
 export interface SqlDialect {
+  /** Short driver name: 'postgres', 'mysql', or 'sqlite'. */
+  readonly driverType: string;
+
   /** e.g. `count(orders.id)`, `sum(orders.amount)`. */
   aggregate(fn: Aggregate, column: string): string;
 

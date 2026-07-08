@@ -2,6 +2,8 @@ import { Aggregate } from '../enums/aggregate.enum';
 import { DatePart, SqlDialect } from './sql-dialect.interface';
 
 export class MySqlDialect implements SqlDialect {
+  readonly driverType = 'mysql';
+
   aggregate(fn: Aggregate, column: string): string {
     return `${fn}(${column})`;
   }

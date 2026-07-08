@@ -6,8 +6,6 @@ import { Metrics } from 'nestjs-metrics-core';
 import {
   createOrdersDataSource,
   ordersQuery,
-  resetOrders,
-  seedOrders,
 } from './helpers/orders-datasource';
 
 describe('toSql() on executor backend', () => {

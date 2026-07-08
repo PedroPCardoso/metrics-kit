@@ -33,5 +33,29 @@ export interface VariationResult {
   };
 }
 
+/**
+ * Fired on every query execution (or cache hit). Use it to instrument with
+ * OpenTelemetry, Prometheus, or any observability tool — the library itself
+ * carries no runtime dependency on any of them.
+ */
+export interface QueryEvent {
+  /** The rendered SQL with masked parameter values (OWASP A09). */
+  sql: string;
+  /** Wall-clock duration in milliseconds. */
+  durationMs: number;
+  /** The SQL dialect used ('postgres' | 'mysql' | 'sqlite'). */
+  dialect: string;
+  /** The execution backend ('typeorm' | 'executor'). */
+  backend: string;
+  /** Which terminal method produced this query. */
+  terminal: 'metrics' | 'trends' | 'variations' | 'comparison' | 'invalidations';
+  /** Cache status for this execution. */
+  cache: 'hit' | 'miss' | 'off';
+  /** Present only when the query failed; carries the error code, never the raw error. */
+  error?: { code: string };
+}
+
+export type OnQueryHandler = (event: QueryEvent) => void;
+
 /** Per-call configuration for a metrics query. */
 export type { MetricsOptions } from './options.schema';
