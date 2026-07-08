@@ -25,7 +25,13 @@ import {
   toPercent,
 } from './formatting/trends.formatter';
 import { gapFillRaw, populate, presentIntegerLabels } from './formatting/missing-data';
-import { GroupedTrendsResult, MetricsOptions, TrendsResult, VariationResult } from './types';
+import {
+  GroupedTrendsResult,
+  MetricsOptions,
+  TrendsComparisonResult,
+  TrendsResult,
+  VariationResult,
+} from './types';
 import { PERIOD_TO_DATE_PART, toTrendRow, isRecord } from './types/helpers';
 import type { CacheOptions, CacheStore } from './cache/types';
 import { planCacheKey } from './cache/cache-key';
@@ -960,6 +966,63 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return result;
   }
 
+  /**
+   * Two aligned trend series: the current time window and a shifted comparison
+   * window side by side, sharing a single label axis.
+   *
+   * The comparison window runs the same aggregate, period, and window settings
+   * but with the reference point shifted back by `previousCount` units of
+   * `previousPeriod`. Labels are merged across both series so every label
+   * appears once; gaps are filled with `0`.
+   *
+   * @param previousCount - How many periods back the comparison window sits (must be `> 0`).
+   * @param previousPeriod - The period unit to step back by; one of the period enums.
+   * @param inPercent - When `true`, convert each data point to its percentage of the series total.
+   * @returns Two aligned data series with a shared label axis.
+   * @throws {@link InvalidPeriodException} when `previousPeriod` is not a valid period.
+   * @throws {@link InvalidVariationsCountException} when `previousCount` is not greater than `0`.
+   */
+  async trendsWithComparison(
+    previousCount: number,
+    previousPeriod: Period,
+    inPercent = false,
+  ): Promise<TrendsComparisonResult> {
+    if (!VARIATION_PERIODS.includes(previousPeriod)) {
+      throw new InvalidPeriodException(previousPeriod);
+    }
+    if (previousCount <= 0) {
+      throw new InvalidVariationsCountException();
+    }
+
+    const previous = this.cloneWithTrendState();
+    shiftReference(previous, previousPeriod, previousCount);
+
+    const current = (await this.trends(inPercent)) as TrendsResult;
+    const prior = (await previous.trends(inPercent)) as TrendsResult;
+
+    return mergeTrends(current, prior);
+  }
+
+  /** Create a clone carrying all trend-relevant state from the current builder. */
+  private cloneWithTrendState(): MetricsBuilder<T> {
+    const clone = this.baseClone();
+    clone.period = this.period;
+    clone.windowCount = this.windowCount;
+    clone.range = this.range;
+    clone.groupBy = this.groupBy;
+    clone.labelColumnName = this.labelColumnName;
+    clone.fill = this.fill;
+    clone.missingValue = this.missingValue;
+    clone.missingLabels = [...this.missingLabels];
+    clone.groupedLabels = [...this.groupedLabels];
+    clone.groupedAggregate = this.groupedAggregate;
+    clone.year = this.year;
+    clone.month = this.month;
+    clone.day = this.day;
+    clone.week = this.week;
+    return clone;
+  }
+
   /** Remove the cached entry for the current trends query shape. */
   async invalidateTrends(): Promise<void> {
     this.invalidateCache(this.trendsPlan());
@@ -1302,6 +1365,33 @@ function shiftReference<T extends ObjectLiteral>(
       builder.forYear(ago.minus({ years: count }).year);
       break;
   }
+}
+
+/**
+ * Merge two trend series onto a shared, sorted label axis. Labels that appear
+ * in only one series get `0` in the other.
+ */
+function mergeTrends(current: TrendsResult, prior: TrendsResult): TrendsComparisonResult {
+  const allLabels = new Set<(string | number)>();
+  current.labels.forEach((l) => allLabels.add(l));
+  prior.labels.forEach((l) => allLabels.add(l));
+
+  const sortedLabels = [...allLabels].sort((a, b) => {
+    if (typeof a === 'number' && typeof b === 'number') return a - b;
+    return String(a).localeCompare(String(b));
+  });
+
+  const curMap = new Map<string, number>();
+  current.labels.forEach((l, i) => curMap.set(String(l), current.data[i]));
+
+  const prevMap = new Map<string, number>();
+  prior.labels.forEach((l, i) => prevMap.set(String(l), prior.data[i]));
+
+  return {
+    labels: sortedLabels,
+    current: sortedLabels.map((l) => curMap.get(String(l)) ?? 0),
+    previous: sortedLabels.map((l) => prevMap.get(String(l)) ?? 0),
+  };
 }
 
 /** ISO-8601 week number for a JS Date (matches Luxon/Postgres/MySQL/SQLite). */

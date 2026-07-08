@@ -16,6 +16,7 @@ export type { SqlDialect, DatePart } from './dialects/sql-dialect.interface';
 export type {
   TrendsResult,
   GroupedTrendsResult,
+  TrendsComparisonResult,
   VariationResult,
   MetricsOptions,
 } from './types';
