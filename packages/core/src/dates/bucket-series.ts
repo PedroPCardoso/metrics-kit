@@ -3,6 +3,8 @@ import { DatePart } from '../dialects/sql-dialect.interface';
 
 function bucketString(dt: DateTime, part: DatePart): string {
   switch (part) {
+    case 'hour':
+      return dt.toFormat('yyyy-MM-dd HH:00');
     case 'day':
       return dt.toFormat('yyyy-MM-dd');
     case 'month':

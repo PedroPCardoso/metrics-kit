@@ -11,6 +11,8 @@ export class SqliteDialect implements SqlDialect {
 
   periodExpr(part: DatePart, column: string): string {
     switch (part) {
+      case 'hour':
+        return `CAST(strftime('%H', ${column}) AS INTEGER)`;
       case 'day':
         return `CAST(strftime('%d', ${column}) AS INTEGER)`;
       case 'week':
@@ -26,6 +28,8 @@ export class SqliteDialect implements SqlDialect {
 
   dateBucket(part: DatePart, column: string): string {
     switch (part) {
+      case 'hour':
+        return `strftime('%Y-%m-%d', ${column}) || ' ' || strftime('%H', ${column}) || ':00'`;
       case 'day':
         return `strftime('%Y-%m-%d', ${column})`;
       case 'month':

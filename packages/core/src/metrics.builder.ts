@@ -97,6 +97,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   private month: number = this.now.getMonth() + 1;
   private day: number = this.now.getDate();
   private week: number = isoWeek(this.now);
+  private hour: number = this.now.getHours();
 
   /**
    * @internal Construct via the {@link query} or {@link queryExecutor} factories
@@ -447,6 +448,15 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   }
 
   /**
+   * Bucket the series by hour.
+   * @param count - Window size: `0` the whole period, `1` a single hour, `>1` the last `count` hours.
+   * @returns This builder, for chaining.
+   */
+  byHour(count = 0): this {
+    return this.by(Period.HOUR, count);
+  }
+
+  /**
    * Bucket the series by year.
    * @param count - Window size: `0` the whole period, `1` a single year, `>1` the last `count` years.
    * @returns This builder, for chaining.
@@ -504,6 +514,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return this.setGroupBy('month');
   }
 
+  /** Bucket a {@link between}/{@link from} range by hour. @returns This builder, for chaining. */
+  groupByHour(): this {
+    return this.setGroupBy('hour');
+  }
+
   /** Bucket a {@link between}/{@link from} range by year. @returns This builder, for chaining. */
   groupByYear(): this {
     return this.setGroupBy('year');
@@ -538,6 +553,16 @@ export class MetricsBuilder<T extends ObjectLiteral> {
    */
   forMonth(month: number): this {
     this.month = month;
+    return this;
+  }
+
+  /**
+   * Pin the reference hour used by `byHour` window calculations (defaults to the current hour, 0–23).
+   * @param hour - Hour of the day (0–23).
+   * @returns This builder, for chaining.
+   */
+  forHour(hour: number): this {
+    this.hour = hour;
     return this;
   }
 
@@ -580,6 +605,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return this.count(column).byMonth(count);
   }
 
+  /** Shorthand for {@link MetricsBuilder.count | count} + {@link byHour}. */
+  countByHour(column = 'id', count = 0): this {
+    return this.count(column).byHour(count);
+  }
+
   /** Shorthand for {@link MetricsBuilder.count | count} + {@link byYear}. */
   countByYear(column = 'id', count = 0): this {
     return this.count(column).byYear(count);
@@ -620,6 +650,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return this.sum(column).byMonth(count);
   }
 
+  /** Shorthand for {@link sum} + {@link byHour}. */
+  sumByHour(column: string, count = 0): this {
+    return this.sum(column).byHour(count);
+  }
+
   /**
    * Shorthand for {@link sum} + {@link byYear}.
    * @param column - Numeric column to sum.
@@ -652,6 +687,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return this.average(column).byMonth(count);
   }
 
+  /** Shorthand for {@link average} + {@link byHour}. */
+  averageByHour(column: string, count = 0): this {
+    return this.average(column).byHour(count);
+  }
+
   /** Shorthand for {@link average} + {@link byYear}. */
   averageByYear(column: string, count = 0): this {
     return this.average(column).byYear(count);
@@ -672,6 +712,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return this.max(column).byMonth(count);
   }
 
+  /** Shorthand for {@link max} + {@link byHour}. */
+  maxByHour(column: string, count = 0): this {
+    return this.max(column).byHour(count);
+  }
+
   /** Shorthand for {@link max} + {@link byYear}. */
   maxByYear(column: string, count = 0): this {
     return this.max(column).byYear(count);
@@ -690,6 +735,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   /** Shorthand for {@link min} + {@link byMonth}. */
   minByMonth(column: string, count = 0): this {
     return this.min(column).byMonth(count);
+  }
+
+  /** Shorthand for {@link min} + {@link byHour}. */
+  minByHour(column: string, count = 0): this {
+    return this.min(column).byHour(count);
   }
 
   /** Shorthand for {@link min} + {@link byYear}. */
@@ -1101,6 +1151,12 @@ export class MetricsBuilder<T extends ObjectLiteral> {
       );
     } else {
       switch (this.period) {
+        case Period.HOUR:
+          this.eqFilter(where, params, 'year', this.year);
+          this.eqFilter(where, params, 'month', this.month);
+          this.eqFilter(where, params, 'day', this.day);
+          this.windowFilter(where, params, 'hour', this.hour, () => this.resolver().hourPeriod());
+          break;
         case Period.DAY:
           this.eqFilter(where, params, 'year', this.year);
           this.eqFilter(where, params, 'month', this.month);
@@ -1172,7 +1228,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
 
   private resolver(): PeriodResolver {
     return new PeriodResolver(
-      { year: this.year, month: this.month, day: this.day, week: this.week },
+      { year: this.year, month: this.month, day: this.day, week: this.week, hour: this.hour },
       this.windowCount,
     );
   }
@@ -1220,7 +1276,7 @@ function today(): string {
   return `${d.getFullYear()}-${month}-${day}`;
 }
 
-const VARIATION_PERIODS: Period[] = [Period.DAY, Period.WEEK, Period.MONTH, Period.YEAR];
+const VARIATION_PERIODS: Period[] = [Period.HOUR, Period.DAY, Period.WEEK, Period.MONTH, Period.YEAR];
 
 /** Pin a builder's reference point to `count` periods before now. */
 function shiftReference<T extends ObjectLiteral>(
@@ -1230,6 +1286,9 @@ function shiftReference<T extends ObjectLiteral>(
 ): void {
   const ago = DateTime.now();
   switch (period) {
+    case Period.HOUR:
+      builder.forHour(ago.minus({ hours: count }).hour);
+      break;
     case Period.DAY:
       builder.forDay(ago.minus({ days: count }).day);
       break;
