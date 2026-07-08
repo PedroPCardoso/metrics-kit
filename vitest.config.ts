@@ -13,6 +13,7 @@ export default defineConfig({
       { find: /^nestjs-metrics$/, replacement: r('packages/nestjs-metrics/src/index.ts') },
       { find: /^nextjs-metrics\/prisma$/, replacement: r('packages/nextjs-metrics/src/prisma/index.ts') },
       { find: /^nextjs-metrics\/drizzle$/, replacement: r('packages/nextjs-metrics/src/drizzle/index.ts') },
+      { find: /^nextjs-metrics\/kysely$/, replacement: r('packages/nextjs-metrics/src/kysely/index.ts') },
       { find: /^nextjs-metrics$/, replacement: r('packages/nextjs-metrics/src/index.ts') },
       { find: /^@core\/(.*)$/, replacement: r('packages/core/src') + '/$1' },
     ],

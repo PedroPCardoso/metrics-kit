@@ -6,6 +6,7 @@ import { MetricsModule, MetricsService } from 'nestjs-metrics/nestjs';
 import { MetricsBuilder } from 'nestjs-metrics-core';
 import { prismaMetrics } from 'nextjs-metrics/prisma';
 import { drizzleMetrics } from 'nextjs-metrics/drizzle';
+import { kyselyMetrics } from 'nextjs-metrics/kysely';
 import * as nextjsMetrics from 'nextjs-metrics';
 
 assert.strictEqual(typeof Metrics, 'function');
@@ -16,7 +17,9 @@ assert.strictEqual(typeof MetricsService, 'function');
 assert.strictEqual(typeof MetricsBuilder, 'function');
 assert.strictEqual(typeof prismaMetrics, 'function');
 assert.strictEqual(typeof drizzleMetrics, 'function');
+assert.strictEqual(typeof kyselyMetrics, 'function');
 assert.strictEqual(typeof nextjsMetrics.prismaMetrics, 'function');
 assert.strictEqual(typeof nextjsMetrics.drizzleMetrics, 'function');
+assert.strictEqual(typeof nextjsMetrics.kyselyMetrics, 'function');
 
 console.log('✓ consumer smoke OK — ESM package imports and subpaths resolve');

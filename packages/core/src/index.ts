@@ -16,6 +16,7 @@ export type { SqlDialect, DatePart } from './dialects/sql-dialect.interface';
 export type {
   TrendsResult,
   GroupedTrendsResult,
+  TrendsComparisonResult,
   VariationResult,
   MetricsOptions,
 } from './types';
@@ -38,6 +39,8 @@ export type {
   CacheStats,
 } from './cache/types';
 export { MemoryCacheStore } from './cache/memory-cache.store';
+export { createCacheManagerStore } from './cache/cache-manager.store';
+export type { CacheManagerLike } from './cache/cache-manager.store';
 export { MetricsError } from './exceptions/metrics.error';
 export type { MetricsErrorContext } from './exceptions/metrics.error';
 export { QueryExecutionError } from './exceptions/query-execution.exception';

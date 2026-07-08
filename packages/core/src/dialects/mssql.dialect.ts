@@ -3,6 +3,9 @@ import { DatePart, SqlDialect } from './sql-dialect.interface';
 
 export class MssqlDialect implements SqlDialect {
   aggregate(fn: Aggregate, column: string): string {
+    if (fn === Aggregate.COUNT_DISTINCT) {
+      return `count(DISTINCT ${column})`;
+    }
     return `${fn}(${column})`;
   }
 

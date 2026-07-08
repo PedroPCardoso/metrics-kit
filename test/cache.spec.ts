@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DataSource } from 'typeorm';
 import { Metrics, MemoryCacheStore, Period, ValidationError } from 'nestjs-metrics-core';
-import type { CacheEvent, CacheStore, TrendsResult } from 'nestjs-metrics-core';
+import type { CacheEvent, CacheStats, CacheStore, TrendsResult } from 'nestjs-metrics-core';
 import { planCacheKey } from '@core/cache/cache-key';
 import { defaultCacheStore } from '@core/cache/shared';
 import type { QueryPlan } from '@core/backend/query-plan';
@@ -152,7 +152,7 @@ describe('cache — metrics()', () => {
 
     expect(ordersCount).toBe(1);
     expect(refundsCount).toBe(2);
-    expect(defaultCacheStore.stats().misses).toBe(2);
+    expect((defaultCacheStore.stats() as CacheStats).misses).toBe(2);
   });
 
   it('rejects negative TTL in public cache options', async () => {

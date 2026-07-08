@@ -6,11 +6,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 // never loads the other), in addition to the root re-export kept for back-compat.
 import { prismaMetrics, type PrismaClientLike } from 'nextjs-metrics/prisma';
 import { drizzleMetrics, type DrizzleClientLike } from 'nextjs-metrics/drizzle';
+import { kyselyMetrics, type KyselyClientLike } from 'nextjs-metrics/kysely';
 
-describe('nextjs adapters via isolated subpaths (/prisma, /drizzle)', () => {
+describe('nextjs adapters via isolated subpaths (/prisma, /drizzle, /kysely)', () => {
   let db: Database.Database;
   let prisma: PrismaClientLike;
   let drizzle: DrizzleClientLike;
+  let kysely: KyselyClientLike;
 
   beforeAll(() => {
     db = new Database(':memory:');
@@ -37,6 +39,20 @@ describe('nextjs adapters via isolated subpaths (/prisma, /drizzle)', () => {
         db.prepare(sql).all(...params) as T,
     };
     drizzle = { $client: db };
+    kysely = {
+      executeQuery: async <R>({
+        sql,
+        parameters,
+      }: {
+        sql: string;
+        parameters: readonly unknown[];
+        query: unknown;
+        executionType: string;
+      }) => {
+        const rows = db.prepare(sql).all(...(parameters as unknown[]));
+        return { rows: rows as R[] };
+      },
+    };
   });
 
   afterAll(() => db.close());
@@ -51,5 +67,10 @@ describe('nextjs adapters via isolated subpaths (/prisma, /drizzle)', () => {
   it('nextjs-metrics/drizzle exposes a working drizzleMetrics', async () => {
     expect(await drizzleMetrics(drizzle, spec).count().metrics()).toBe(7);
     expect(await drizzleMetrics(drizzle, spec).sum('amount').metrics()).toBe(900);
+  });
+
+  it('nextjs-metrics/kysely exposes a working kyselyMetrics', async () => {
+    expect(await kyselyMetrics(kysely, spec).count().metrics()).toBe(7);
+    expect(await kyselyMetrics(kysely, spec).sum('amount').metrics()).toBe(900);
   });
 });
