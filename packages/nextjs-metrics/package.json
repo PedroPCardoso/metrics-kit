@@ -1,24 +1,24 @@
 {
   "name": "nextjs-metrics",
-  "version": "0.4.1",
-    "description": "Generate chart-ready metrics and trends in Next.js or any Node runtime over Prisma, Drizzle or Kysely. Built on nestjs-metrics-core.",
-    "keywords": [
-      "nextjs",
-      "prisma",
-      "drizzle",
-      "kysely",
-      "metrics",
-      "trends",
-      "charts",
-      "dashboard",
-      "analytics",
-      "time-series",
-      "fluent-api",
-      "postgresql",
-      "mysql",
-      "sqlite",
-      "typescript"
-    ],
+  "version": "0.5.0",
+  "description": "Generate chart-ready metrics and trends in Next.js or any Node runtime over Prisma, Drizzle or Kysely. Built on nestjs-metrics-core.",
+  "keywords": [
+    "nextjs",
+    "prisma",
+    "drizzle",
+    "kysely",
+    "metrics",
+    "trends",
+    "charts",
+    "dashboard",
+    "analytics",
+    "time-series",
+    "fluent-api",
+    "postgresql",
+    "mysql",
+    "sqlite",
+    "typescript"
+  ],
   "author": "Pedro Cardoso",
   "license": "MIT",
   "sideEffects": false,
@@ -82,7 +82,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "nestjs-metrics-core": "^0.3.1"
+    "nestjs-metrics-core": "^0.4.0"
   },
   "peerDependencies": {
     "@prisma/client": "*",
