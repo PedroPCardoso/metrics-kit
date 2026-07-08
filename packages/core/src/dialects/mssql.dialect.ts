@@ -31,9 +31,9 @@ export class MssqlDialect implements SqlDialect {
       case 'day':
         return `CONVERT(varchar(10), ${column}, 23)`;
       case 'month':
-        return `CONVERT(varchar(7), ${column}, 120)`;
+        return `CONVERT(varchar(7), ${column}, 23)`;
       case 'year':
-        return `CONVERT(varchar(4), ${column}, 120)`;
+        return `CONVERT(varchar(4), ${column}, 23)`;
       case 'week': {
         const isoYear = `DATEPART(year, DATEADD(day, 3 - DATEDIFF(day, '1900-01-01', ${column}) % 7, ${column}))`;
         return `CAST(${isoYear} AS VARCHAR(4)) + '-W' + RIGHT('0' + CAST(DATEPART(iso_week, ${column}) AS VARCHAR(2)), 2)`;

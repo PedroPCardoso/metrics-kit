@@ -123,13 +123,13 @@ describe('SQL fragments per dialect', () => {
     expect(dialectFor('mssql').dateBucket('day', dateCol)).toBe(
       'CONVERT(varchar(10), orders.created_at, 23)',
     );
-    expect(dialectFor('mssql').dateBucket('week', dateCol)).toContain('DATEPART(iso_week');
     expect(dialectFor('mssql').dateBucket('month', dateCol)).toBe(
-      'CONVERT(varchar(7), orders.created_at, 120)',
+      'CONVERT(varchar(7), orders.created_at, 23)',
     );
     expect(dialectFor('mssql').dateBucket('year', dateCol)).toBe(
-      'CONVERT(varchar(4), orders.created_at, 120)',
+      'CONVERT(varchar(4), orders.created_at, 23)',
     );
+    expect(dialectFor('mssql').dateBucket('week', dateCol)).toContain('DATEPART(iso_week');
   });
 
   it('escapes identifiers, placeholders and timezone conversion per dialect', () => {
