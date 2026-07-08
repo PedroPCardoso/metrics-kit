@@ -94,7 +94,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   private missingValue = 0;
   private missingLabels: (string | number)[] = [];
   private cumulativeData = false;
-  private groupedLabels: (string | number)[] = [];
+  private groupedLabels: (string | number)[] | null = null;
   private groupedAggregate: Aggregate = Aggregate.SUM;
   private caching: CacheOptions | null = null;
   private cacheStore: CacheStore | undefined;
@@ -366,15 +366,20 @@ export class MetricsBuilder<T extends ObjectLiteral> {
    * `total` carries the main aggregate per bucket. {@link trends} then returns a
    * {@link GroupedTrendsResult} instead of a {@link TrendsResult}.
    *
-   * @param labels - The column values to split into series.
+   * When `labels` is omitted (or empty), the distinct column values are
+   * auto-discovered by querying the database.
+   *
+   * @param labels - Optional column values to split into series; auto-discovered when omitted.
    * @param aggregate - Aggregate function for each series (default {@link Aggregate.SUM}).
    * @returns This builder, for chaining.
    * @throws {@link InvalidAggregateException} when `aggregate` is not a supported function.
    */
-  groupData(labels: (string | number)[], aggregate: Aggregate = Aggregate.SUM): this {
-    assertAggregate(aggregate);
-    this.groupedLabels = labels;
-    this.groupedAggregate = aggregate;
+  groupData(labels?: (string | number)[], aggregate?: Aggregate): this {
+    if (aggregate !== undefined) {
+      assertAggregate(aggregate);
+      this.groupedAggregate = aggregate;
+    }
+    this.groupedLabels = labels ?? [];
     return this;
   }
 
@@ -936,34 +941,31 @@ export class MetricsBuilder<T extends ObjectLiteral> {
    * ```
    */
   async trends(inPercent = false): Promise<TrendsResult | GroupedTrendsResult> {
-    let result: TrendsResult | GroupedTrendsResult;
+    if (this.groupedLabels !== null) {
+      return this.groupedTrends(inPercent);
+    }
 
-    if (this.groupedLabels.length > 0) {
-      result = await this.groupedTrends(inPercent);
+    const rows = await this.trendsData();
+    const formatter = new TrendsFormatter(new LabelFormatter(this.locale));
+    const ctx = { year: this.year, month: this.month };
+
+    let series: TrendsResult;
+    if (this.fill && this.isPeriodMode()) {
+      // Date periods: fill the integer buckets, then format the labels.
+      series = formatter.format(gapFillRaw(rows, this.missingValue), this.period, ctx);
     } else {
-      const rows = await this.trendsData();
-      const formatter = new TrendsFormatter(new LabelFormatter(this.locale));
-      const ctx = { year: this.year, month: this.month };
-
-      let series: TrendsResult;
-      if (this.fill && this.isPeriodMode()) {
-        series = formatter.format(gapFillRaw(rows, this.missingValue), this.period, ctx);
-      } else {
-        const labelPeriod = this.labelColumnName || this.range ? null : this.period;
-        series = formatter.format(rows, labelPeriod, ctx);
-        if (this.fill) {
-          series = populate(await this.canonicalLabels(), series, this.missingValue);
-        }
+      const labelPeriod = this.labelColumnName || this.range ? null : this.period;
+      series = formatter.format(rows, labelPeriod, ctx);
+      if (this.fill) {
+        series = populate(await this.canonicalLabels(), series, this.missingValue);
       }
-
-      result = inPercent ? toPercent(series) : series;
     }
 
-    if (this.cumulativeData && !this.groupedLabels.length) {
-      result = this.applyCumulative(result as TrendsResult);
+    if (this.cumulativeData) {
+      series = this.applyCumulative(series);
     }
 
-    return result;
+    return inPercent ? toPercent(series) : series;
   }
 
   /**
@@ -1014,7 +1016,8 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     clone.fill = this.fill;
     clone.missingValue = this.missingValue;
     clone.missingLabels = [...this.missingLabels];
-    clone.groupedLabels = [...this.groupedLabels];
+    clone.cumulativeData = this.cumulativeData;
+    clone.groupedLabels = this.groupedLabels === null ? null : [...this.groupedLabels];
     clone.groupedAggregate = this.groupedAggregate;
     clone.year = this.year;
     clone.month = this.month;
@@ -1054,8 +1057,33 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return rows.map((row) => normalizeLabel(row.label));
   }
 
+  /**
+   * Resolve group labels: return the explicit set when provided, or query
+   * distinct values from the aggregate column when auto-discovery is enabled.
+   * The result is stored back on the builder so subsequent calls are stable.
+   */
+  private async resolveGroupLabels(): Promise<(string | number)[]> {
+    if (this.groupedLabels && this.groupedLabels.length > 0) {
+      return this.groupedLabels;
+    }
+    const params: Record<string, unknown> = {};
+    const where = this.buildFilters(params);
+    const plan: QueryPlan = {
+      source: this.sourceIdentity,
+      select: [{ expr: this.column, alias: 'label' }],
+      where,
+      distinct: true,
+      orderBy: { expr: 'label', dir: 'ASC' },
+      params,
+    };
+    const rows = await this.backend.run(plan);
+    this.groupedLabels = rows.map((row) => normalizeLabel(row.label));
+    return this.groupedLabels;
+  }
+
   /** Build the multi-series GroupedTrendsResult for groupData(). */
   private async groupedTrends(inPercent: boolean): Promise<GroupedTrendsResult> {
+    const labels = await this.resolveGroupLabels();
     const rows = await this.trendsData();
     const byLabel = new Map(rows.map((row) => [String(row.label), row]));
     const canonical = await this.groupedCanonical(rows);
@@ -1063,7 +1091,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     const labelFormatter = new LabelFormatter(this.locale);
     const ctx = { year: this.year, month: this.month };
     const labelPeriod = this.labelColumnName || this.range ? null : this.period;
-    const labels = canonical.map((label) => labelFormatter.format(label, labelPeriod, ctx));
+    const formattedLabels = canonical.map((label) => labelFormatter.format(label, labelPeriod, ctx));
 
     const seriesFor = (field: string): number[] =>
       canonical.map((label) => {
@@ -1073,11 +1101,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
       });
 
     const data: GroupedTrendsResult['data'] = { total: seriesFor('data') };
-    this.groupedLabels.forEach((label, i) => {
+    labels.forEach((label, i) => {
       data[String(label)] = seriesFor(`data${i}`);
     });
 
-    let result: GroupedTrendsResult = { labels, data };
+    let result: GroupedTrendsResult = { labels: formattedLabels, data };
 
     if (this.cumulativeData) {
       result = this.groupedCumulative(result);
@@ -1153,7 +1181,8 @@ export class MetricsBuilder<T extends ObjectLiteral> {
    * parameters (never interpolated).
    */
   private appendGroupedData(select: SelectItem[], params: Record<string, unknown>): void {
-    this.groupedLabels.forEach((value, i) => {
+    const labels = this.groupedLabels ?? [];
+    labels.forEach((value, i) => {
       const key = `nm_g${i}`;
       params[key] = value;
       select.push({

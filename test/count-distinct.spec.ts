@@ -91,7 +91,7 @@ describe('countDistinct() on executor backend', () => {
     let emittedSql = '';
     const ds: DataSource = {
       dialect: 'sqlite',
-      execute: async (sql, _params) => {
+      execute: async (sql) => {
         emittedSql = sql;
         return [];
       },
