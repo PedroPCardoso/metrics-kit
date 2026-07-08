@@ -7,6 +7,7 @@ import { MetricsBuilder } from 'nestjs-metrics-core';
 import { toChartJs, toApexCharts, toRecharts } from 'nestjs-metrics-core/charts';
 import { prismaMetrics } from 'nextjs-metrics/prisma';
 import { drizzleMetrics } from 'nextjs-metrics/drizzle';
+import { kyselyMetrics } from 'nextjs-metrics/kysely';
 import * as nextjsMetrics from 'nextjs-metrics';
 
 assert.strictEqual(typeof Metrics, 'function');
@@ -17,8 +18,10 @@ assert.strictEqual(typeof MetricsService, 'function');
 assert.strictEqual(typeof MetricsBuilder, 'function');
 assert.strictEqual(typeof prismaMetrics, 'function');
 assert.strictEqual(typeof drizzleMetrics, 'function');
+assert.strictEqual(typeof kyselyMetrics, 'function');
 assert.strictEqual(typeof nextjsMetrics.prismaMetrics, 'function');
 assert.strictEqual(typeof nextjsMetrics.drizzleMetrics, 'function');
+assert.strictEqual(typeof nextjsMetrics.kyselyMetrics, 'function');
 assert.strictEqual(typeof toChartJs, 'function');
 assert.strictEqual(typeof toApexCharts, 'function');
 assert.strictEqual(typeof toRecharts, 'function');

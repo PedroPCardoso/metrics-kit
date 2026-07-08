@@ -32,9 +32,9 @@ export interface CacheStats {
 
 /** Pluggable cache backend. The default MemoryCacheStore is suitable for single-process use. */
 export interface CacheStore {
-  get<T>(key: string): T | undefined;
-  set<T>(key: string, value: T, ttl: number): void;
-  del(key: string): void;
-  clear(): void;
-  stats(): CacheStats;
+  get<T>(key: string): Promise<T | undefined> | T | undefined;
+  set<T>(key: string, value: T, ttl: number): Promise<void> | void;
+  del(key: string): Promise<void> | void;
+  clear(): Promise<void> | void;
+  stats(): Promise<CacheStats> | CacheStats;
 }

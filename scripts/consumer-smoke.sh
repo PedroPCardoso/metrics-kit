@@ -29,7 +29,6 @@ cat > tsconfig.node.json <<'JSON'
   "compilerOptions": {
     "target": "ES2020",
     "module": "commonjs",
-    "moduleResolution": "node",
     "strict": true,
     "skipLibCheck": true,
     "esModuleInterop": true,

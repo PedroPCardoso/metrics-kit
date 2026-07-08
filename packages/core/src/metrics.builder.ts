@@ -94,7 +94,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   private missingValue = 0;
   private missingLabels: (string | number)[] = [];
   private cumulativeData = false;
-  private groupedLabels: (string | number)[] = [];
+  private groupedLabels: (string | number)[] | null = null;
   private groupedAggregate: Aggregate = Aggregate.SUM;
   private caching: CacheOptions | null = null;
   private cacheStore: CacheStore | undefined;
@@ -103,6 +103,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   private month: number = this.now.getMonth() + 1;
   private day: number = this.now.getDate();
   private week: number = isoWeek(this.now);
+  private hour: number = this.now.getHours();
 
   /**
    * @internal Construct via the {@link query} or {@link queryExecutor} factories
@@ -263,6 +264,16 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return this.aggregate(Aggregate.COUNT, column);
   }
 
+  /**
+   * Aggregate by counting distinct values in a column (`COUNT(DISTINCT ...)`).
+   * @param column - Column to count distinct values of (default `id`).
+   * @returns This builder, for chaining.
+   * @throws {@link InvalidIdentifierException} when `column` is not a plain SQL identifier.
+   */
+  countDistinct(column = 'id'): this {
+    return this.aggregate(Aggregate.COUNT_DISTINCT, column);
+  }
+
   // --- Targeting ----------------------------------------------------------
 
   /**
@@ -355,15 +366,20 @@ export class MetricsBuilder<T extends ObjectLiteral> {
    * `total` carries the main aggregate per bucket. {@link trends} then returns a
    * {@link GroupedTrendsResult} instead of a {@link TrendsResult}.
    *
-   * @param labels - The column values to split into series.
+   * When `labels` is omitted (or empty), the distinct column values are
+   * auto-discovered by querying the database.
+   *
+   * @param labels - Optional column values to split into series; auto-discovered when omitted.
    * @param aggregate - Aggregate function for each series (default {@link Aggregate.SUM}).
    * @returns This builder, for chaining.
    * @throws {@link InvalidAggregateException} when `aggregate` is not a supported function.
    */
-  groupData(labels: (string | number)[], aggregate: Aggregate = Aggregate.SUM): this {
-    assertAggregate(aggregate);
-    this.groupedLabels = labels;
-    this.groupedAggregate = aggregate;
+  groupData(labels?: (string | number)[], aggregate?: Aggregate): this {
+    if (aggregate !== undefined) {
+      assertAggregate(aggregate);
+      this.groupedAggregate = aggregate;
+    }
+    this.groupedLabels = labels ?? [];
     return this;
   }
 
@@ -443,6 +459,15 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   }
 
   /**
+   * Bucket the series by hour.
+   * @param count - Window size: `0` the whole period, `1` a single hour, `>1` the last `count` hours.
+   * @returns This builder, for chaining.
+   */
+  byHour(count = 0): this {
+    return this.by(Period.HOUR, count);
+  }
+
+  /**
    * Bucket the series by year.
    * @param count - Window size: `0` the whole period, `1` a single year, `>1` the last `count` years.
    * @returns This builder, for chaining.
@@ -500,6 +525,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return this.setGroupBy('month');
   }
 
+  /** Bucket a {@link between}/{@link from} range by hour. @returns This builder, for chaining. */
+  groupByHour(): this {
+    return this.setGroupBy('hour');
+  }
+
   /** Bucket a {@link between}/{@link from} range by year. @returns This builder, for chaining. */
   groupByYear(): this {
     return this.setGroupBy('year');
@@ -534,6 +564,16 @@ export class MetricsBuilder<T extends ObjectLiteral> {
    */
   forMonth(month: number): this {
     this.month = month;
+    return this;
+  }
+
+  /**
+   * Pin the reference hour used by `byHour` window calculations (defaults to the current hour, 0–23).
+   * @param hour - Hour of the day (0–23).
+   * @returns This builder, for chaining.
+   */
+  forHour(hour: number): this {
+    this.hour = hour;
     return this;
   }
 
@@ -576,9 +616,34 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return this.count(column).byMonth(count);
   }
 
+  /** Shorthand for {@link MetricsBuilder.count | count} + {@link byHour}. */
+  countByHour(column = 'id', count = 0): this {
+    return this.count(column).byHour(count);
+  }
+
   /** Shorthand for {@link MetricsBuilder.count | count} + {@link byYear}. */
   countByYear(column = 'id', count = 0): this {
     return this.count(column).byYear(count);
+  }
+
+  /** Shorthand for {@link countDistinct} + {@link byDay}. */
+  countDistinctByDay(column = 'id', count = 0): this {
+    return this.countDistinct(column).byDay(count);
+  }
+
+  /** Shorthand for {@link countDistinct} + {@link byWeek}. */
+  countDistinctByWeek(column = 'id', count = 0): this {
+    return this.countDistinct(column).byWeek(count);
+  }
+
+  /** Shorthand for {@link countDistinct} + {@link byMonth}. */
+  countDistinctByMonth(column = 'id', count = 0): this {
+    return this.countDistinct(column).byMonth(count);
+  }
+
+  /** Shorthand for {@link countDistinct} + {@link byYear}. */
+  countDistinctByYear(column = 'id', count = 0): this {
+    return this.countDistinct(column).byYear(count);
   }
 
   /** Shorthand for {@link sum} + {@link byDay}. */
@@ -594,6 +659,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   /** Shorthand for {@link sum} + {@link byMonth}. */
   sumByMonth(column: string, count = 0): this {
     return this.sum(column).byMonth(count);
+  }
+
+  /** Shorthand for {@link sum} + {@link byHour}. */
+  sumByHour(column: string, count = 0): this {
+    return this.sum(column).byHour(count);
   }
 
   /**
@@ -628,6 +698,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return this.average(column).byMonth(count);
   }
 
+  /** Shorthand for {@link average} + {@link byHour}. */
+  averageByHour(column: string, count = 0): this {
+    return this.average(column).byHour(count);
+  }
+
   /** Shorthand for {@link average} + {@link byYear}. */
   averageByYear(column: string, count = 0): this {
     return this.average(column).byYear(count);
@@ -646,6 +721,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   /** Shorthand for {@link max} + {@link byMonth}. */
   maxByMonth(column: string, count = 0): this {
     return this.max(column).byMonth(count);
+  }
+
+  /** Shorthand for {@link max} + {@link byHour}. */
+  maxByHour(column: string, count = 0): this {
+    return this.max(column).byHour(count);
   }
 
   /** Shorthand for {@link max} + {@link byYear}. */
@@ -668,6 +748,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return this.min(column).byMonth(count);
   }
 
+  /** Shorthand for {@link min} + {@link byHour}. */
+  minByHour(column: string, count = 0): this {
+    return this.min(column).byHour(count);
+  }
+
   /** Shorthand for {@link min} + {@link byYear}. */
   minByYear(column: string, count = 0): this {
     return this.min(column).byYear(count);
@@ -676,6 +761,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   /** Shorthand for {@link count} + {@link between}. */
   countBetween([start, end]: [string, string], column = 'id'): this {
     return this.count(column).between(start, end);
+  }
+
+  /** Shorthand for {@link countDistinct} + {@link between}. */
+  countDistinctBetween([start, end]: [string, string], column = 'id'): this {
+    return this.countDistinct(column).between(start, end);
   }
 
   /** Shorthand for {@link sum} + {@link between}. */
@@ -701,6 +791,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   /** Shorthand for {@link count} + {@link from}. */
   countFrom(date: string, column = 'id'): this {
     return this.count(column).from(date);
+  }
+
+  /** Shorthand for {@link countDistinct} + {@link from}. */
+  countDistinctFrom(date: string, column = 'id'): this {
+    return this.countDistinct(column).from(date);
   }
 
   /** Shorthand for {@link sum} + {@link from}. */
@@ -740,6 +835,30 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     const plan = this.metricsPlan();
     const rows = await this.withCache(plan, () => this.backend.run(plan));
     return normalizeData(rows[0]?.data);
+  }
+
+  /**
+   * Return the SQL string the {@link metrics} terminal method would execute,
+   * without actually running it. Parameter values are shown inline; pass
+   * `{ mask: true }` to redact them with `'[REDACTED]'`.
+   *
+   * @param options - When `mask` is true parameter values are redacted.
+   * @returns The rendered SQL with bound parameter values.
+   */
+  toSql(options?: { mask?: boolean }): string {
+    return this.backend.toSql(this.metricsPlan(), options?.mask);
+  }
+
+  /**
+   * Return the SQL string the {@link trends} terminal method would execute,
+   * without actually running it. Parameter values are shown inline; pass
+   * `{ mask: true }` to redact them with `'[REDACTED]'`.
+   *
+   * @param options - When `mask` is true parameter values are redacted.
+   * @returns The rendered SQL with bound parameter values.
+   */
+  toTrendsSql(options?: { mask?: boolean }): string {
+    return this.backend.toSql(this.trendsPlan(), options?.mask);
   }
 
   /** Remove the cached entry for the current single-metric query shape. */
@@ -822,34 +941,31 @@ export class MetricsBuilder<T extends ObjectLiteral> {
    * ```
    */
   async trends(inPercent = false): Promise<TrendsResult | GroupedTrendsResult> {
-    let result: TrendsResult | GroupedTrendsResult;
+    if (this.groupedLabels !== null) {
+      return this.groupedTrends(inPercent);
+    }
 
-    if (this.groupedLabels.length > 0) {
-      result = await this.groupedTrends(inPercent);
+    const rows = await this.trendsData();
+    const formatter = new TrendsFormatter(new LabelFormatter(this.locale));
+    const ctx = { year: this.year, month: this.month };
+
+    let series: TrendsResult;
+    if (this.fill && this.isPeriodMode()) {
+      // Date periods: fill the integer buckets, then format the labels.
+      series = formatter.format(gapFillRaw(rows, this.missingValue), this.period, ctx);
     } else {
-      const rows = await this.trendsData();
-      const formatter = new TrendsFormatter(new LabelFormatter(this.locale));
-      const ctx = { year: this.year, month: this.month };
-
-      let series: TrendsResult;
-      if (this.fill && this.isPeriodMode()) {
-        series = formatter.format(gapFillRaw(rows, this.missingValue), this.period, ctx);
-      } else {
-        const labelPeriod = this.labelColumnName || this.range ? null : this.period;
-        series = formatter.format(rows, labelPeriod, ctx);
-        if (this.fill) {
-          series = populate(await this.canonicalLabels(), series, this.missingValue);
-        }
+      const labelPeriod = this.labelColumnName || this.range ? null : this.period;
+      series = formatter.format(rows, labelPeriod, ctx);
+      if (this.fill) {
+        series = populate(await this.canonicalLabels(), series, this.missingValue);
       }
-
-      result = inPercent ? toPercent(series) : series;
     }
 
-    if (this.cumulativeData && !this.groupedLabels.length) {
-      result = this.applyCumulative(result as TrendsResult);
+    if (this.cumulativeData) {
+      series = this.applyCumulative(series);
     }
 
-    return result;
+    return inPercent ? toPercent(series) : series;
   }
 
   /**
@@ -900,12 +1016,14 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     clone.fill = this.fill;
     clone.missingValue = this.missingValue;
     clone.missingLabels = [...this.missingLabels];
-    clone.groupedLabels = [...this.groupedLabels];
+    clone.cumulativeData = this.cumulativeData;
+    clone.groupedLabels = this.groupedLabels === null ? null : [...this.groupedLabels];
     clone.groupedAggregate = this.groupedAggregate;
     clone.year = this.year;
     clone.month = this.month;
     clone.day = this.day;
     clone.week = this.week;
+    clone.hour = this.hour;
     return clone;
   }
 
@@ -940,8 +1058,33 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return rows.map((row) => normalizeLabel(row.label));
   }
 
+  /**
+   * Resolve group labels: return the explicit set when provided, or query
+   * distinct values from the aggregate column when auto-discovery is enabled.
+   * The result is stored back on the builder so subsequent calls are stable.
+   */
+  private async resolveGroupLabels(): Promise<(string | number)[]> {
+    if (this.groupedLabels && this.groupedLabels.length > 0) {
+      return this.groupedLabels;
+    }
+    const params: Record<string, unknown> = {};
+    const where = this.buildFilters(params);
+    const plan: QueryPlan = {
+      source: this.sourceIdentity,
+      select: [{ expr: this.column, alias: 'label' }],
+      where,
+      distinct: true,
+      orderBy: { expr: 'label', dir: 'ASC' },
+      params,
+    };
+    const rows = await this.backend.run(plan);
+    this.groupedLabels = rows.map((row) => normalizeLabel(row.label));
+    return this.groupedLabels;
+  }
+
   /** Build the multi-series GroupedTrendsResult for groupData(). */
   private async groupedTrends(inPercent: boolean): Promise<GroupedTrendsResult> {
+    const labels = await this.resolveGroupLabels();
     const rows = await this.trendsData();
     const byLabel = new Map(rows.map((row) => [String(row.label), row]));
     const canonical = await this.groupedCanonical(rows);
@@ -949,7 +1092,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     const labelFormatter = new LabelFormatter(this.locale);
     const ctx = { year: this.year, month: this.month };
     const labelPeriod = this.labelColumnName || this.range ? null : this.period;
-    const labels = canonical.map((label) => labelFormatter.format(label, labelPeriod, ctx));
+    const formattedLabels = canonical.map((label) => labelFormatter.format(label, labelPeriod, ctx));
 
     const seriesFor = (field: string): number[] =>
       canonical.map((label) => {
@@ -959,11 +1102,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
       });
 
     const data: GroupedTrendsResult['data'] = { total: seriesFor('data') };
-    this.groupedLabels.forEach((label, i) => {
+    labels.forEach((label, i) => {
       data[String(label)] = seriesFor(`data${i}`);
     });
 
-    let result: GroupedTrendsResult = { labels, data };
+    let result: GroupedTrendsResult = { labels: formattedLabels, data };
 
     if (this.cumulativeData) {
       result = this.groupedCumulative(result);
@@ -1039,7 +1182,8 @@ export class MetricsBuilder<T extends ObjectLiteral> {
    * parameters (never interpolated).
    */
   private appendGroupedData(select: SelectItem[], params: Record<string, unknown>): void {
-    this.groupedLabels.forEach((value, i) => {
+    const labels = this.groupedLabels ?? [];
+    labels.forEach((value, i) => {
       const key = `nm_g${i}`;
       params[key] = value;
       select.push({
@@ -1100,6 +1244,12 @@ export class MetricsBuilder<T extends ObjectLiteral> {
       );
     } else {
       switch (this.period) {
+        case Period.HOUR:
+          this.eqFilter(where, params, 'year', this.year);
+          this.eqFilter(where, params, 'month', this.month);
+          this.eqFilter(where, params, 'day', this.day);
+          this.windowFilter(where, params, 'hour', this.hour, () => this.resolver().hourPeriod());
+          break;
         case Period.DAY:
           this.eqFilter(where, params, 'year', this.year);
           this.eqFilter(where, params, 'month', this.month);
@@ -1171,7 +1321,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
 
   private resolver(): PeriodResolver {
     return new PeriodResolver(
-      { year: this.year, month: this.month, day: this.day, week: this.week },
+      { year: this.year, month: this.month, day: this.day, week: this.week, hour: this.hour },
       this.windowCount,
     );
   }
@@ -1185,24 +1335,24 @@ export class MetricsBuilder<T extends ObjectLiteral> {
       return execute();
     }
     const key = planCacheKey(plan, this.caching.keyPrefix);
-    const cached = this.cacheStore.get<T>(key);
+    const cached = await this.cacheStore.get<T>(key);
     if (cached !== undefined) {
       this.logCache('hit', key);
       return cached;
     }
     this.logCache('miss', key);
     const result = await execute();
-    this.cacheStore.set(key, result, this.caching.ttl);
+    await this.cacheStore.set(key, result, this.caching.ttl);
     this.logCache('set', key);
     return result;
   }
 
-  private invalidateCache(plan: QueryPlan): void {
+  private async invalidateCache(plan: QueryPlan): Promise<void> {
     if (!this.caching || !this.cacheStore) {
       return;
     }
     const key = planCacheKey(plan, this.caching.keyPrefix);
-    this.cacheStore.del(key);
+    await this.cacheStore.del(key);
     this.logCache('delete', key);
   }
 
@@ -1219,7 +1369,7 @@ function today(): string {
   return `${d.getFullYear()}-${month}-${day}`;
 }
 
-const VARIATION_PERIODS: Period[] = [Period.DAY, Period.WEEK, Period.MONTH, Period.YEAR];
+const VARIATION_PERIODS: Period[] = [Period.HOUR, Period.DAY, Period.WEEK, Period.MONTH, Period.YEAR];
 
 /** Pin a builder's reference point to `count` periods before now. */
 function shiftReference<T extends ObjectLiteral>(
@@ -1229,6 +1379,9 @@ function shiftReference<T extends ObjectLiteral>(
 ): void {
   const ago = DateTime.now();
   switch (period) {
+    case Period.HOUR:
+      builder.forHour(ago.minus({ hours: count }).hour);
+      break;
     case Period.DAY:
       builder.forDay(ago.minus({ days: count }).day);
       break;

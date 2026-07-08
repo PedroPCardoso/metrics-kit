@@ -3,11 +3,16 @@ import { DatePart, SqlDialect } from './sql-dialect.interface';
 
 export class MySqlDialect implements SqlDialect {
   aggregate(fn: Aggregate, column: string): string {
+    if (fn === Aggregate.COUNT_DISTINCT) {
+      return `count(DISTINCT ${column})`;
+    }
     return `${fn}(${column})`;
   }
 
   periodExpr(part: DatePart, column: string): string {
     switch (part) {
+      case 'hour':
+        return `hour(${column})`;
       case 'day':
         return `day(${column})`;
       case 'week':
@@ -22,6 +27,8 @@ export class MySqlDialect implements SqlDialect {
 
   dateBucket(part: DatePart, column: string): string {
     switch (part) {
+      case 'hour':
+        return `date_format(${column}, '%Y-%m-%d %H:00')`;
       case 'day':
         return `date_format(${column}, '%Y-%m-%d')`;
       case 'month':

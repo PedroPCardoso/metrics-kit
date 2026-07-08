@@ -59,6 +59,61 @@ describe.each(allTestDrivers())('trends() count by month on %s', (driver: TestDr
   });
 });
 
+describe('trends() count by hour on SQLite', () => {
+  let dataSource: DataSource;
+
+  beforeAll(async () => {
+    dataSource = await createOrdersDataSource();
+  });
+
+  afterAll(async () => {
+    await dataSource?.destroy();
+  });
+
+  beforeEach(async () => {
+    await resetOrders(dataSource);
+  });
+
+  it('returns hour labels and per-hour counts', async () => {
+    // Use Date.UTC so the hour is deterministic regardless of host timezone.
+    await seedOrders(dataSource, [
+      { createdAt: new Date(Date.UTC(2026, 0, 10, 10, 0, 0)).toISOString() },
+      { createdAt: new Date(Date.UTC(2026, 0, 10, 10, 30, 0)).toISOString() },
+      { createdAt: new Date(Date.UTC(2026, 0, 10, 14, 0, 0)).toISOString() },
+    ]);
+
+    const result = await Metrics.query(ordersQuery(dataSource))
+      .count()
+      .byHour()
+      .forYear(2026)
+      .forMonth(1)
+      .forDay(10)
+      .trends();
+
+    const labels = result.labels.map(String);
+    expect(labels).toContain('10:00');
+    expect(labels).toContain('14:00');
+
+    const data = result.data as number[];
+    const idx10 = labels.indexOf('10:00');
+    const idx14 = labels.indexOf('14:00');
+    expect(data[idx10]).toBe(2);
+    expect(data[idx14]).toBe(1);
+  });
+
+  it('returns empty labels and data when no rows match', async () => {
+    const result = await Metrics.query(ordersQuery(dataSource))
+      .count()
+      .byHour()
+      .forYear(2026)
+      .forMonth(1)
+      .forDay(10)
+      .trends();
+
+    expect(result).toEqual({ labels: [], data: [] });
+  });
+});
+
 describe('trends() label locale (SQLite)', () => {
   let dataSource: DataSource;
   const year = new Date().getFullYear();

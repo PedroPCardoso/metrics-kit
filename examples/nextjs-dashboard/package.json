@@ -9,10 +9,11 @@
   },
   "dependencies": {
     "better-sqlite3": "^11",
+    "chart.js": "^4.5.1",
     "drizzle-orm": "^0",
     "luxon": "^3",
-    "next": "^14",
     "nestjs-metrics-core": "*",
+    "next": "^14",
     "nextjs-metrics": "*",
     "react": "^18",
     "react-dom": "^18",
