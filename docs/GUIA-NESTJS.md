@@ -24,6 +24,8 @@
   - [.metrics()](#metrics)
   - [.trends()](#trends)
   - [.metricsWithVariations()](#metricswithvariations)
+  - [.trendsWithComparison()](#trendswithcomparison)
+- [Cumulative Trends (cumulative)](#cumulative-trends-cumulative)
 - [Fill Missing Data (fillMissingData)](#fill-missing-data-fillmissingdata)
 - [Multiple Series (groupData)](#multiple-series-groupdata)
 - [Percentages (inPercent)](#percentages-inpercent)
@@ -35,6 +37,8 @@
 - [Validation / SkipValidation](#validation--skipvalidation)
 - [Error Hierarchy](#error-hierarchy)
 - [Repository Helpers (metricsFor / withMetrics)](#repository-helpers-metricsfor--withmetrics)
+- [SQL Introspection (toSql / toTrendsSql)](#sql-introspection-tosql--totrendssql)
+- [Chart Helpers](#chart-helpers)
 - [Error Reference Table](#error-reference-table)
 - [Complete Example](#complete-example)
 
@@ -211,17 +215,21 @@ const result = await MetricsBuilder
 
 ## Aggregators
 
-| Method       | SQL      | Description                  | Default `column` |
-|-------------|----------|------------------------------|------------------|
-| `.count()`  | `COUNT`  | Number of rows               | `'id'`           |
-| `.sum()`    | `SUM`    | Sum of a numeric column      | (required)       |
-| `.average()`| `AVG`    | Average of a numeric column  | (required)       |
-| `.max()`    | `MAX`    | Largest value in the column  | (required)       |
-| `.min()`    | `MIN`    | Smallest value in the column | (required)       |
+| Method              | SQL              | Description                         | Default `column` |
+|--------------------|------------------|-------------------------------------|------------------|
+| `.count()`         | `COUNT`          | Number of rows                      | `'id'`           |
+| `.countDistinct()` | `COUNT DISTINCT` | Distinct values in a column         | `'id'`           |
+| `.sum()`           | `SUM`            | Sum of a numeric column             | (required)       |
+| `.average()`       | `AVG`            | Average of a numeric column         | (required)       |
+| `.max()`           | `MAX`            | Largest value in the column         | (required)       |
+| `.min()`           | `MIN`            | Smallest value in the column        | (required)       |
 
 ```typescript
 // Simple count (default column 'id')
 await Metrics.query(qb).count().metrics();
+
+// Distinct count
+await Metrics.query(qb).countDistinct('customer_id').metrics();
 
 // Sum of a specific column
 await Metrics.query(qb).sum('amount').metrics();
@@ -246,6 +254,7 @@ Define how data is grouped over time. Used with `.trends()` or with `.metrics()`
 
 | Method                    | Bucket     | Labels (trends)        |
 |--------------------------|------------|------------------------|
+| `.byHour(count?)`        | Hour       | `HH:00` (24-hour)      |
 | `.byDay(count?)`         | Day        | Day of the week name   |
 | `.byWeek(count?)`        | ISO Week   | `Week N`               |
 | `.byMonth(count?)`       | Month      | Month name             |
@@ -357,6 +366,10 @@ await m().count().between('2026-03-01', '2026-03-15').groupByWeek().trends();
 
 // By day (explicit, equivalent to the default)
 await m().count().between('2026-01-01', '2026-01-31').groupByDay().trends();
+
+// By hour
+await m().count().between('2026-01-15 00:00', '2026-01-15 23:59').groupByHour().trends();
+// → { labels: ['00:00', '01:00', ...], data: [...] }
 ```
 
 ---
@@ -390,6 +403,12 @@ await Metrics.query(qb)
   .count().byMonth()
   .forYear(2026)
   .trends();
+
+// Specific hour (0-23)
+await Metrics.query(qb)
+  .count().byHour(1)
+  .forYear(2026).forMonth(6).forDay(15).forHour(14)
+  .metrics();
 ```
 
 ---
@@ -549,6 +568,68 @@ const r = await Metrics.query(qb)
 > `previousCount` must be > 0. `previousPeriod` must be one of:
 > `Period.DAY | Period.WEEK | Period.MONTH | Period.YEAR`.
 
+### `.trendsWithComparison()`
+
+Returns two aligned series — the current period and a comparison period shifted back —
+ready for side-by-side chart overlays.
+
+```typescript
+interface TrendsComparisonResult {
+  labels: (string | number)[];
+  current: number[];
+  previous: number[];
+}
+```
+
+```typescript
+import { Period } from 'nestjs-metrics';
+
+// Current year vs previous year, month by month
+const r = await Metrics.query(qb)
+  .countByMonth()
+  .forYear(2026)
+  .trendsWithComparison(1, Period.YEAR);
+// → { labels: ['January', ...], current: [10, ...], previous: [7, ...] }
+
+// As percentage of each series total
+const r = await Metrics.query(qb)
+  .sumByMonth('amount')
+  .forYear(2026)
+  .trendsWithComparison(1, Period.YEAR, true);
+// → { labels: [...], current: [45, ...], previous: [38, ...] }
+```
+
+> `previousCount` must be > 0. `previousPeriod` must be one of:
+> `Period.DAY | Period.WEEK | Period.MONTH | Period.YEAR | Period.HOUR`.
+
+---
+
+## Cumulative Trends (cumulative)
+
+`cumulative()` transforms a `.trends()` series into a **running total** — each bucket
+becomes the sum of all values up to that point.
+
+```typescript
+await Metrics.query(qb)
+  .countByMonth()
+  .forYear(2026)
+  .cumulative()
+  .trends();
+// → { labels: ['January', 'February', 'March'], data: [10, 25, 32] }
+//   (10, 10+15, 10+15+7)
+```
+
+Compatible with `fillMissingData` and `groupData`:
+
+```typescript
+await Metrics.query(qb)
+  .sumByMonth('amount')
+  .forYear(2026)
+  .fillMissingData()
+  .cumulative()
+  .trends();
+```
+
 ---
 
 ## Fill Missing Data (fillMissingData)
@@ -622,6 +703,20 @@ await Metrics.query(qb)
   .trends();
 // → data.total: [2, 0, 1], data.pending: [1, 0, 1], data.delivered: [1, 0, 0]
 // labels: ['January', 'February', 'March']
+```
+
+### Auto-discover labels
+
+When `labels` is omitted (or an empty array), the builder queries the database for
+all distinct values in the column and uses them as series names automatically.
+
+```typescript
+await Metrics.query(qb)
+  .countByMonth('status')
+  .groupData()            // ← no labels — auto-discovered at query time
+  .forYear(2026)
+  .trends();
+// → data keys match whatever distinct statuses exist in the table
 ```
 
 ### Custom aggregator
@@ -736,29 +831,70 @@ const result = await Metrics.query(qb, opts, cache)
 
 ### Custom CacheStore
 
-Implement the `CacheStore` interface:
+Implement the `CacheStore` interface — all methods can be **sync or async**:
 
 ```typescript
 import type { CacheStore } from 'nestjs-metrics-core';
 
 class MyRedisStore implements CacheStore {
-  get<T>(key: string): T | undefined { /* ... */ }
-  set<T>(key: string, value: T, ttl: number): void { /* ... */ }
-  del(key: string): void { /* ... */ }
-  clear(): void { /* ... */ }
-  stats(): CacheStats { /* ... */ }
+  async get<T>(key: string): Promise<T | undefined> { /* ... */ }
+  async set<T>(key: string, value: T, ttl: number): Promise<void> { /* ... */ }
+  async del(key: string): Promise<void> { /* ... */ }
+  async clear(): Promise<void> { /* ... */ }
+  async stats(): Promise<CacheStats> { /* ... */ }
 }
+```
+
+### cache-manager bridge
+
+Use `createCacheManagerStore()` to wrap any `cache-manager` v5+ store:
+
+```typescript
+import { createCacheManagerStore } from 'nestjs-metrics';
+import { createCache } from 'cache-manager';
+import { redisStore } from 'cache-manager-ioredis-yet';
+
+const cacheManager = await createCache({ store: await redisStore({ host: 'localhost' }) });
+const cache = createCacheManagerStore(cacheManager);
+
+const result = await Metrics.query(qb, { cache: { enabled: true, ttl: 60 } }, cache)
+  .countByMonth()
+  .trends();
 ```
 
 ### CacheStore methods
 
-| Method      | Description                                          |
-|-------------|------------------------------------------------------|
-| `get(key)`  | Returns value or `undefined` if not found            |
-| `set(key, value, ttl)` | Stores with TTL in seconds                |
-| `del(key)`  | Removes entry                                        |
-| `clear()`   | Clears everything and resets statistics              |
-| `stats()`   | Returns `{ hits, misses, size }`                     |
+| Method                   | Description                                          |
+|--------------------------|------------------------------------------------------|
+| `get(key)`               | Returns value or `undefined` if not found (sync/async) |
+| `set(key, value, ttl)`   | Stores with TTL in seconds (sync/async)              |
+| `del(key)`               | Removes entry (sync/async)                           |
+| `clear()`                | Clears everything and resets statistics (sync/async) |
+| `stats()`                | Returns `{ hits, misses, size }` (sync/async)        |
+
+### Observability — cache logger
+
+Pass a `logger` callback in `cache` options to receive events on every cache
+hit, miss, set, or delete:
+
+```typescript
+import type { CacheEvent } from 'nestjs-metrics-core';
+
+const opts = {
+  cache: {
+    enabled: true,
+    ttl: 60,
+    logger: ({ type, key }: CacheEvent) => console.log(`cache:${type} ${key}`),
+  },
+};
+
+await Metrics.query(qb, opts, cache).countByMonth().trends();
+// → cache:miss metrics:...
+// → cache:set  metrics:...
+// → cache:hit  metrics:...  (subsequent calls)
+```
+
+Event types: `'hit' | 'miss' | 'set' | 'delete'`.
 
 ---
 
@@ -771,7 +907,7 @@ Used **without TypeORM** — with Prisma, Drizzle, or any SQL driver. Requires a
 
 ```typescript
 interface DataSource {
-  dialect: 'postgres' | 'mysql' | 'sqlite';
+  dialect: 'postgres' | 'mysql' | 'sqlite' | 'mssql';
   execute: (sql: string, params: unknown[]) => Promise<Row[]>;
 }
 ```
@@ -956,6 +1092,85 @@ const result = await repo
   .metrics()
   .countByMonth()
   .trends();
+```
+
+---
+
+## SQL Introspection (toSql / toTrendsSql)
+
+`toSql()` and `toTrendsSql()` render the SQL that would be executed — useful for
+debugging, logging, or building query-plan tests.
+
+```typescript
+const sql = Metrics.query(qb)
+  .sumByMonth('amount')
+  .forYear(2026)
+  .toSql();
+// → SELECT SUM("amount") AS value FROM ... WHERE ...
+
+const trendsSql = Metrics.query(qb)
+  .sumByMonth('amount')
+  .forYear(2026)
+  .toTrendsSql();
+```
+
+### Masking values
+
+Pass `{ mask: true }` to redact bound parameter values (safe for production logs):
+
+```typescript
+const sql = builder.toSql({ mask: true });
+// → ... WHERE created_at >= '[REDACTED]' AND created_at < '[REDACTED]'
+```
+
+---
+
+## Chart Helpers
+
+Convert any `TrendsResult`, `GroupedTrendsResult`, or `TrendsComparisonResult` into
+the format expected by popular chart libraries.
+
+```typescript
+import { toChartJs, toApexCharts, toRecharts } from 'nestjs-metrics';
+// or: from 'nestjs-metrics-core'
+```
+
+### `toChartJs(result, options?)`
+
+```typescript
+const trends = await Metrics.query(qb).countByMonth().forYear(2026).trends();
+const config = toChartJs(trends, { label: 'Orders', type: 'line' });
+// → { type: 'line', data: { labels: [...], datasets: [{ label: 'Orders', data: [...] }] } }
+```
+
+| Option         | Type      | Default   | Description                              |
+|----------------|-----------|-----------|------------------------------------------|
+| `label`        | `string`  | `'value'` | Dataset label                            |
+| `type`         | `string`  | `'line'`  | Chart.js chart type                      |
+| `includeTotal` | `boolean` | `false`   | Include the total series in grouped results |
+
+### `toApexCharts(result, options?)`
+
+```typescript
+const config = toApexCharts(trends, { name: 'Orders' });
+// → { series: [{ name: 'Orders', data: [...] }], xaxis: { categories: [...] } }
+```
+
+### `toRecharts(result)`
+
+Returns a flat array of data points:
+
+```typescript
+const data = toRecharts(trends);
+// → [{ label: 'January', value: 10 }, { label: 'February', value: 15 }, ...]
+```
+
+With `GroupedTrendsResult` or `TrendsComparisonResult`, each point carries one key
+per series:
+
+```typescript
+const data = toRecharts(grouped);
+// → [{ label: 'January', total: 10, pending: 6, paid: 4 }, ...]
 ```
 
 ---
