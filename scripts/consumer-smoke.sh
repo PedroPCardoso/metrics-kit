@@ -24,27 +24,26 @@ npm install --no-audit --no-fund \
 node smoke.cjs
 node smoke.mjs
 
-cat > tsconfig.node.json <<'JSON'
-{
-  "compilerOptions": {
-    "target": "ES2020",
-    "module": "commonjs",
-    "moduleResolution": "node",
-    "strict": true,
-    "skipLibCheck": true,
-    "esModuleInterop": true,
-    "ignoreDeprecations": "6.0"
-  },
-  "include": ["smoke-types.ts"]
-}
-JSON
-
 cat > tsconfig.node16.json <<'JSON'
 {
   "compilerOptions": {
     "target": "ES2022",
     "module": "Node16",
     "moduleResolution": "node16",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true
+  },
+  "include": ["smoke-types.ts"]
+}
+JSON
+
+cat > tsconfig.nodenext.json <<'JSON'
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "nodenext",
     "strict": true,
     "skipLibCheck": true,
     "esModuleInterop": true
@@ -66,7 +65,7 @@ cat > tsconfig.bundler.json <<'JSON'
 }
 JSON
 
-npx tsc -p tsconfig.node.json --noEmit
 npx tsc -p tsconfig.node16.json --noEmit
+npx tsc -p tsconfig.nodenext.json --noEmit
 npx tsc -p tsconfig.bundler.json --noEmit
-echo "✓ TypeScript smoke OK — moduleResolution node, node16 and bundler"
+echo "✓ TypeScript smoke OK — moduleResolution node16, nodenext and bundler"
