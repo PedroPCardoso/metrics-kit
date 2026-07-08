@@ -27,3 +27,5 @@ function getInstance(): MemoryCacheStore {
   }
   return instance;
 }
+
+export { MemoryCacheStore };

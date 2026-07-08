@@ -1334,24 +1334,24 @@ export class MetricsBuilder<T extends ObjectLiteral> {
       return execute();
     }
     const key = planCacheKey(plan, this.caching.keyPrefix);
-    const cached = this.cacheStore.get<T>(key);
+    const cached = await this.cacheStore.get<T>(key);
     if (cached !== undefined) {
       this.logCache('hit', key);
       return cached;
     }
     this.logCache('miss', key);
     const result = await execute();
-    this.cacheStore.set(key, result, this.caching.ttl);
+    await this.cacheStore.set(key, result, this.caching.ttl);
     this.logCache('set', key);
     return result;
   }
 
-  private invalidateCache(plan: QueryPlan): void {
+  private async invalidateCache(plan: QueryPlan): Promise<void> {
     if (!this.caching || !this.cacheStore) {
       return;
     }
     const key = planCacheKey(plan, this.caching.keyPrefix);
-    this.cacheStore.del(key);
+    await this.cacheStore.del(key);
     this.logCache('delete', key);
   }
 
