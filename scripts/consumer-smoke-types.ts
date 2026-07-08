@@ -1,6 +1,7 @@
 import { Metrics, metricsFor, withMetrics } from 'nestjs-metrics';
 import { MetricsModule, MetricsService } from 'nestjs-metrics/nestjs';
 import { MetricsBuilder } from 'nestjs-metrics-core';
+import { toChartJs, toApexCharts, toRecharts } from 'nestjs-metrics-core/charts';
 import { prismaMetrics } from 'nextjs-metrics/prisma';
 import { drizzleMetrics } from 'nextjs-metrics/drizzle';
 import { kyselyMetrics } from 'nextjs-metrics/kysely';
@@ -12,6 +13,9 @@ void withMetrics;
 void MetricsModule;
 void MetricsService;
 void MetricsBuilder;
+void toChartJs;
+void toApexCharts;
+void toRecharts;
 void prismaMetrics;
 void drizzleMetrics;
 void kyselyMetrics;

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Metrics Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, system-ui, sans-serif; background: #f5f5f5; padding: 2rem; color: #333; }
+  h1 { margin-bottom: 1.5rem; }
+  .kpis { display: flex; gap: 1rem; margin-bottom: 2rem; }
+  .kpi-card { flex: 1; background: #fff; padding: 1.5rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+  .kpi-card h3 { font-size: .875rem; color: #666; margin-bottom: .5rem; }
+  .kpi-card .value { font-size: 2rem; font-weight: 700; }
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  .chart-card { background: #fff; padding: 1rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+  .chart-card.full { grid-column: 1 / -1; }
+  canvas { width: 100% !important; max-height: 300px; }
+</style>
+</head>
+<body>
+  <h1>Dashboard</h1>
+  <div class="kpis" id="kpis"></div>
+  <div class="charts">
+    <div class="chart-card full"><h2>Revenue by Month</h2><canvas id="revenueChart"></canvas></div>
+    <div class="chart-card full"><h2>Orders by Status</h2><canvas id="statusChart"></canvas></div>
+  </div>
+  <script>
+    async function load() {
+      const kpiRes = await fetch('/api/kpis');
+      const kpis = await kpiRes.json();
+      document.getElementById('kpis').innerHTML = `
+        <div class="kpi-card"><h3>Total Orders</h3><div class="value">${kpis.totalOrders}</div></div>
+        <div class="kpi-card"><h3>Total Revenue</h3><div class="value">$${Number(kpis.totalRevenue).toFixed(2)}</div></div>
+      `;
+      const revRes = await fetch('/api/revenue-by-month');
+      const revCfg = await revRes.json();
+      new Chart(document.getElementById('revenueChart'), revCfg);
+      const statusRes = await fetch('/api/orders-by-status');
+      const statusCfg = await statusRes.json();
+      new Chart(document.getElementById('statusChart'), statusCfg);
+    }
+    load();
+  </script>
+</body>
+</html>

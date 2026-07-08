@@ -1023,6 +1023,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     clone.month = this.month;
     clone.day = this.day;
     clone.week = this.week;
+    clone.hour = this.hour;
     return clone;
   }
 

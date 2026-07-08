@@ -61,20 +61,10 @@ describe('SQL fragments per dialect', () => {
     );
   });
 
-  it('extracts the year per dialect', () => {
+  it('extracts day, week, month and year per dialect', () => {
     expect(dialectFor('better-sqlite3').periodExpr('year', dateCol)).toBe(
       "CAST(strftime('%Y', orders.created_at) AS INTEGER)",
     );
-    expect(dialectFor('postgres').periodExpr('year', dateCol)).toBe(
-      'EXTRACT(YEAR FROM orders.created_at)',
-    );
-    expect(dialectFor('mysql').periodExpr('year', dateCol)).toBe('year(orders.created_at)');
-    expect(dialectFor('mssql').periodExpr('year', dateCol)).toBe(
-      'DATEPART(year, orders.created_at)',
-    );
-  });
-
-  it('extracts day, week and month per dialect', () => {
     expect(dialectFor('postgres').periodExpr('day', dateCol)).toBe(
       'EXTRACT(DAY FROM orders.created_at)',
     );
@@ -84,9 +74,13 @@ describe('SQL fragments per dialect', () => {
     expect(dialectFor('postgres').periodExpr('month', dateCol)).toBe(
       'EXTRACT(MONTH FROM orders.created_at)',
     );
+    expect(dialectFor('postgres').periodExpr('year', dateCol)).toBe(
+      'EXTRACT(YEAR FROM orders.created_at)',
+    );
     expect(dialectFor('mysql').periodExpr('day', dateCol)).toBe('day(orders.created_at)');
     expect(dialectFor('mysql').periodExpr('week', dateCol)).toBe('WEEKOFYEAR(orders.created_at)');
     expect(dialectFor('mysql').periodExpr('month', dateCol)).toBe('month(orders.created_at)');
+    expect(dialectFor('mysql').periodExpr('year', dateCol)).toBe('year(orders.created_at)');
     expect(dialectFor('mssql').periodExpr('day', dateCol)).toBe(
       'DATEPART(day, orders.created_at)',
     );
@@ -95,6 +89,9 @@ describe('SQL fragments per dialect', () => {
     );
     expect(dialectFor('mssql').periodExpr('month', dateCol)).toBe(
       'DATEPART(month, orders.created_at)',
+    );
+    expect(dialectFor('mssql').periodExpr('year', dateCol)).toBe(
+      'DATEPART(year, orders.created_at)',
     );
   });
 
