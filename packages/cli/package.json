@@ -1,6 +1,7 @@
 {
   "name": "@nestjs-metrics/cli",
   "version": "0.2.1",
+  "private": true,
   "description": "CLI, generators and offline playground for nestjs-metrics. Scaffold dashboards, validate projects and preview metrics locally.",
   "keywords": [
     "nestjs",
