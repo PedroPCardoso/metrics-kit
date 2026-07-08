@@ -42,10 +42,17 @@
       "require": "./dist/index.js",
       "default": "./dist/index.js"
     },
+    "./charts": {
+      "types": "./dist/charts/index.d.ts",
+      "import": "./dist/charts/index.mjs",
+      "require": "./dist/charts/index.js",
+      "default": "./dist/charts/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
     "dist",
+    "charts",
     "README.md",
     "CHANGELOG.md"
   ],
