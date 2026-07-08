@@ -1,23 +1,24 @@
 {
   "name": "nextjs-metrics",
   "version": "0.4.1",
-  "description": "Generate chart-ready metrics and trends in Next.js or any Node runtime over Prisma or Drizzle. Built on nestjs-metrics-core.",
-  "keywords": [
-    "nextjs",
-    "prisma",
-    "drizzle",
-    "metrics",
-    "trends",
-    "charts",
-    "dashboard",
-    "analytics",
-    "time-series",
-    "fluent-api",
-    "postgresql",
-    "mysql",
-    "sqlite",
-    "typescript"
-  ],
+    "description": "Generate chart-ready metrics and trends in Next.js or any Node runtime over Prisma, Drizzle or Kysely. Built on nestjs-metrics-core.",
+    "keywords": [
+      "nextjs",
+      "prisma",
+      "drizzle",
+      "kysely",
+      "metrics",
+      "trends",
+      "charts",
+      "dashboard",
+      "analytics",
+      "time-series",
+      "fluent-api",
+      "postgresql",
+      "mysql",
+      "sqlite",
+      "typescript"
+    ],
   "author": "Pedro Cardoso",
   "license": "MIT",
   "sideEffects": false,
@@ -53,12 +54,19 @@
       "require": "./dist/drizzle/index.js",
       "default": "./dist/drizzle/index.js"
     },
+    "./kysely": {
+      "types": "./dist/kysely/index.d.ts",
+      "import": "./dist/kysely/index.mjs",
+      "require": "./dist/kysely/index.js",
+      "default": "./dist/kysely/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
     "dist",
     "prisma",
     "drizzle",
+    "kysely",
     "README.md",
     "CHANGELOG.md"
   ],
@@ -79,6 +87,7 @@
   "peerDependencies": {
     "@prisma/client": "*",
     "drizzle-orm": "*",
+    "kysely": "*",
     "typeorm": "^0.3"
   },
   "peerDependenciesMeta": {
@@ -86,6 +95,9 @@
       "optional": true
     },
     "drizzle-orm": {
+      "optional": true
+    },
+    "kysely": {
       "optional": true
     },
     "typeorm": {

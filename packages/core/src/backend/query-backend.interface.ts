@@ -13,4 +13,5 @@ export interface QueryBackend {
   /** Quote a pre-validated identifier for this backend. */
   escapeId(name: string): string;
   run(plan: QueryPlan): Promise<Row[]>;
+  toSql(plan: QueryPlan, mask?: boolean): string;
 }

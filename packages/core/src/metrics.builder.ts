@@ -25,7 +25,13 @@ import {
   toPercent,
 } from './formatting/trends.formatter';
 import { gapFillRaw, populate, presentIntegerLabels } from './formatting/missing-data';
-import { GroupedTrendsResult, MetricsOptions, TrendsResult, VariationResult } from './types';
+import {
+  GroupedTrendsResult,
+  MetricsOptions,
+  TrendsComparisonResult,
+  TrendsResult,
+  VariationResult,
+} from './types';
 import { PERIOD_TO_DATE_PART, toTrendRow, isRecord } from './types/helpers';
 import type { CacheOptions, CacheStore } from './cache/types';
 import { planCacheKey } from './cache/cache-key';
@@ -87,6 +93,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   private fill = false;
   private missingValue = 0;
   private missingLabels: (string | number)[] = [];
+  private cumulativeData = false;
   private groupedLabels: (string | number)[] | null = null;
   private groupedAggregate: Aggregate = Aggregate.SUM;
   private caching: CacheOptions | null = null;
@@ -96,6 +103,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   private month: number = this.now.getMonth() + 1;
   private day: number = this.now.getDate();
   private week: number = isoWeek(this.now);
+  private hour: number = this.now.getHours();
 
   /**
    * @internal Construct via the {@link query} or {@link queryExecutor} factories
@@ -256,6 +264,16 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return this.aggregate(Aggregate.COUNT, column);
   }
 
+  /**
+   * Aggregate by counting distinct values in a column (`COUNT(DISTINCT ...)`).
+   * @param column - Column to count distinct values of (default `id`).
+   * @returns This builder, for chaining.
+   * @throws {@link InvalidIdentifierException} when `column` is not a plain SQL identifier.
+   */
+  countDistinct(column = 'id'): this {
+    return this.aggregate(Aggregate.COUNT_DISTINCT, column);
+  }
+
   // --- Targeting ----------------------------------------------------------
 
   /**
@@ -322,8 +340,28 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   }
 
   /**
+   * Convert each data series into a running total (cumulative sum). Works with
+   * both simple {@link TrendsResult} and {@link GroupedTrendsResult} (from
+   * {@link groupData}).
+   *
+   * @returns This builder, for chaining.
+   *
+   * @example
+   * ```ts
+   * const cumulative = await Metrics.query(orderRepo.createQueryBuilder('order'))
+   *   .countByMonth()
+   *   .cumulative()
+   *   .trends();
+   * // data: [2, 5, 8, ...] instead of [2, 3, 3, ...]
+   * ```
+   */
+  cumulative(): this {
+    this.cumulativeData = true;
+    return this;
+  }
+
+  /**
    * Split the aggregate column into one data series per value, for a stacked /
-   * multi-series chart. Each series counts the rows matching that value per
    * bucket (`aggregate(CASE WHEN column = value THEN 1 ELSE 0 END)`), and
    * `total` carries the main aggregate per bucket. {@link trends} then returns a
    * {@link GroupedTrendsResult} instead of a {@link TrendsResult}.
@@ -421,6 +459,15 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   }
 
   /**
+   * Bucket the series by hour.
+   * @param count - Window size: `0` the whole period, `1` a single hour, `>1` the last `count` hours.
+   * @returns This builder, for chaining.
+   */
+  byHour(count = 0): this {
+    return this.by(Period.HOUR, count);
+  }
+
+  /**
    * Bucket the series by year.
    * @param count - Window size: `0` the whole period, `1` a single year, `>1` the last `count` years.
    * @returns This builder, for chaining.
@@ -478,6 +525,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return this.setGroupBy('month');
   }
 
+  /** Bucket a {@link between}/{@link from} range by hour. @returns This builder, for chaining. */
+  groupByHour(): this {
+    return this.setGroupBy('hour');
+  }
+
   /** Bucket a {@link between}/{@link from} range by year. @returns This builder, for chaining. */
   groupByYear(): this {
     return this.setGroupBy('year');
@@ -512,6 +564,16 @@ export class MetricsBuilder<T extends ObjectLiteral> {
    */
   forMonth(month: number): this {
     this.month = month;
+    return this;
+  }
+
+  /**
+   * Pin the reference hour used by `byHour` window calculations (defaults to the current hour, 0–23).
+   * @param hour - Hour of the day (0–23).
+   * @returns This builder, for chaining.
+   */
+  forHour(hour: number): this {
+    this.hour = hour;
     return this;
   }
 
@@ -554,9 +616,34 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return this.count(column).byMonth(count);
   }
 
+  /** Shorthand for {@link MetricsBuilder.count | count} + {@link byHour}. */
+  countByHour(column = 'id', count = 0): this {
+    return this.count(column).byHour(count);
+  }
+
   /** Shorthand for {@link MetricsBuilder.count | count} + {@link byYear}. */
   countByYear(column = 'id', count = 0): this {
     return this.count(column).byYear(count);
+  }
+
+  /** Shorthand for {@link countDistinct} + {@link byDay}. */
+  countDistinctByDay(column = 'id', count = 0): this {
+    return this.countDistinct(column).byDay(count);
+  }
+
+  /** Shorthand for {@link countDistinct} + {@link byWeek}. */
+  countDistinctByWeek(column = 'id', count = 0): this {
+    return this.countDistinct(column).byWeek(count);
+  }
+
+  /** Shorthand for {@link countDistinct} + {@link byMonth}. */
+  countDistinctByMonth(column = 'id', count = 0): this {
+    return this.countDistinct(column).byMonth(count);
+  }
+
+  /** Shorthand for {@link countDistinct} + {@link byYear}. */
+  countDistinctByYear(column = 'id', count = 0): this {
+    return this.countDistinct(column).byYear(count);
   }
 
   /** Shorthand for {@link sum} + {@link byDay}. */
@@ -572,6 +659,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   /** Shorthand for {@link sum} + {@link byMonth}. */
   sumByMonth(column: string, count = 0): this {
     return this.sum(column).byMonth(count);
+  }
+
+  /** Shorthand for {@link sum} + {@link byHour}. */
+  sumByHour(column: string, count = 0): this {
+    return this.sum(column).byHour(count);
   }
 
   /**
@@ -606,6 +698,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return this.average(column).byMonth(count);
   }
 
+  /** Shorthand for {@link average} + {@link byHour}. */
+  averageByHour(column: string, count = 0): this {
+    return this.average(column).byHour(count);
+  }
+
   /** Shorthand for {@link average} + {@link byYear}. */
   averageByYear(column: string, count = 0): this {
     return this.average(column).byYear(count);
@@ -624,6 +721,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   /** Shorthand for {@link max} + {@link byMonth}. */
   maxByMonth(column: string, count = 0): this {
     return this.max(column).byMonth(count);
+  }
+
+  /** Shorthand for {@link max} + {@link byHour}. */
+  maxByHour(column: string, count = 0): this {
+    return this.max(column).byHour(count);
   }
 
   /** Shorthand for {@link max} + {@link byYear}. */
@@ -646,6 +748,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return this.min(column).byMonth(count);
   }
 
+  /** Shorthand for {@link min} + {@link byHour}. */
+  minByHour(column: string, count = 0): this {
+    return this.min(column).byHour(count);
+  }
+
   /** Shorthand for {@link min} + {@link byYear}. */
   minByYear(column: string, count = 0): this {
     return this.min(column).byYear(count);
@@ -654,6 +761,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   /** Shorthand for {@link count} + {@link between}. */
   countBetween([start, end]: [string, string], column = 'id'): this {
     return this.count(column).between(start, end);
+  }
+
+  /** Shorthand for {@link countDistinct} + {@link between}. */
+  countDistinctBetween([start, end]: [string, string], column = 'id'): this {
+    return this.countDistinct(column).between(start, end);
   }
 
   /** Shorthand for {@link sum} + {@link between}. */
@@ -679,6 +791,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   /** Shorthand for {@link count} + {@link from}. */
   countFrom(date: string, column = 'id'): this {
     return this.count(column).from(date);
+  }
+
+  /** Shorthand for {@link countDistinct} + {@link from}. */
+  countDistinctFrom(date: string, column = 'id'): this {
+    return this.countDistinct(column).from(date);
   }
 
   /** Shorthand for {@link sum} + {@link from}. */
@@ -718,6 +835,30 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     const plan = this.metricsPlan();
     const rows = await this.withCache(plan, () => this.backend.run(plan));
     return normalizeData(rows[0]?.data);
+  }
+
+  /**
+   * Return the SQL string the {@link metrics} terminal method would execute,
+   * without actually running it. Parameter values are shown inline; pass
+   * `{ mask: true }` to redact them with `'[REDACTED]'`.
+   *
+   * @param options - When `mask` is true parameter values are redacted.
+   * @returns The rendered SQL with bound parameter values.
+   */
+  toSql(options?: { mask?: boolean }): string {
+    return this.backend.toSql(this.metricsPlan(), options?.mask);
+  }
+
+  /**
+   * Return the SQL string the {@link trends} terminal method would execute,
+   * without actually running it. Parameter values are shown inline; pass
+   * `{ mask: true }` to redact them with `'[REDACTED]'`.
+   *
+   * @param options - When `mask` is true parameter values are redacted.
+   * @returns The rendered SQL with bound parameter values.
+   */
+  toTrendsSql(options?: { mask?: boolean }): string {
+    return this.backend.toSql(this.trendsPlan(), options?.mask);
   }
 
   /** Remove the cached entry for the current single-metric query shape. */
@@ -813,7 +954,6 @@ export class MetricsBuilder<T extends ObjectLiteral> {
       // Date periods: fill the integer buckets, then format the labels.
       series = formatter.format(gapFillRaw(rows, this.missingValue), this.period, ctx);
     } else {
-      // Category (labelColumn) and range labels are already final strings.
       const labelPeriod = this.labelColumnName || this.range ? null : this.period;
       series = formatter.format(rows, labelPeriod, ctx);
       if (this.fill) {
@@ -821,7 +961,69 @@ export class MetricsBuilder<T extends ObjectLiteral> {
       }
     }
 
+    if (this.cumulativeData) {
+      series = this.applyCumulative(series);
+    }
+
     return inPercent ? toPercent(series) : series;
+  }
+
+  /**
+   * Two aligned trend series: the current time window and a shifted comparison
+   * window side by side, sharing a single label axis.
+   *
+   * The comparison window runs the same aggregate, period, and window settings
+   * but with the reference point shifted back by `previousCount` units of
+   * `previousPeriod`. Labels are merged across both series so every label
+   * appears once; gaps are filled with `0`.
+   *
+   * @param previousCount - How many periods back the comparison window sits (must be `> 0`).
+   * @param previousPeriod - The period unit to step back by; one of the period enums.
+   * @param inPercent - When `true`, convert each data point to its percentage of the series total.
+   * @returns Two aligned data series with a shared label axis.
+   * @throws {@link InvalidPeriodException} when `previousPeriod` is not a valid period.
+   * @throws {@link InvalidVariationsCountException} when `previousCount` is not greater than `0`.
+   */
+  async trendsWithComparison(
+    previousCount: number,
+    previousPeriod: Period,
+    inPercent = false,
+  ): Promise<TrendsComparisonResult> {
+    if (!VARIATION_PERIODS.includes(previousPeriod)) {
+      throw new InvalidPeriodException(previousPeriod);
+    }
+    if (previousCount <= 0) {
+      throw new InvalidVariationsCountException();
+    }
+
+    const previous = this.cloneWithTrendState();
+    shiftReference(previous, previousPeriod, previousCount);
+
+    const current = (await this.trends(inPercent)) as TrendsResult;
+    const prior = (await previous.trends(inPercent)) as TrendsResult;
+
+    return mergeTrends(current, prior);
+  }
+
+  /** Create a clone carrying all trend-relevant state from the current builder. */
+  private cloneWithTrendState(): MetricsBuilder<T> {
+    const clone = this.baseClone();
+    clone.period = this.period;
+    clone.windowCount = this.windowCount;
+    clone.range = this.range;
+    clone.groupBy = this.groupBy;
+    clone.labelColumnName = this.labelColumnName;
+    clone.fill = this.fill;
+    clone.missingValue = this.missingValue;
+    clone.missingLabels = [...this.missingLabels];
+    clone.cumulativeData = this.cumulativeData;
+    clone.groupedLabels = this.groupedLabels === null ? null : [...this.groupedLabels];
+    clone.groupedAggregate = this.groupedAggregate;
+    clone.year = this.year;
+    clone.month = this.month;
+    clone.day = this.day;
+    clone.week = this.week;
+    return clone;
   }
 
   /** Remove the cached entry for the current trends query shape. */
@@ -891,21 +1093,47 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     const labelPeriod = this.labelColumnName || this.range ? null : this.period;
     const formattedLabels = canonical.map((label) => labelFormatter.format(label, labelPeriod, ctx));
 
-    const seriesFor = (field: string): number[] => {
-      const values = canonical.map((label) => {
+    const seriesFor = (field: string): number[] =>
+      canonical.map((label) => {
         const raw = byLabel.get(String(label));
         const row = isRecord(raw) ? raw : undefined;
         return row ? Number(row[field]) : this.missingValue;
       });
-      return inPercent ? percentArray(values) : values;
-    };
 
     const data: GroupedTrendsResult['data'] = { total: seriesFor('data') };
     labels.forEach((label, i) => {
       data[String(label)] = seriesFor(`data${i}`);
     });
 
-    return { labels: formattedLabels, data };
+    let result: GroupedTrendsResult = { labels: formattedLabels, data };
+
+    if (this.cumulativeData) {
+      result = this.groupedCumulative(result);
+    }
+
+    if (inPercent) {
+      const pct: Record<string, number[]> = {};
+      for (const [key, values] of Object.entries(result.data)) {
+        pct[key] = percentArray(values);
+      }
+      result = { labels: result.labels, data: pct as GroupedTrendsResult['data'] };
+    }
+
+    return result;
+  }
+
+  private applyCumulative(result: TrendsResult): TrendsResult {
+    let sum = 0;
+    return { labels: result.labels, data: result.data.map((v) => (sum += v)) };
+  }
+
+  private groupedCumulative(result: GroupedTrendsResult): GroupedTrendsResult {
+    const data: Record<string, number[]> = {};
+    for (const [key, values] of Object.entries(result.data)) {
+      let sum = 0;
+      data[key] = values.map((v) => (sum += v));
+    }
+    return { labels: result.labels, data: data as GroupedTrendsResult['data'] };
   }
 
   /** Canonical raw labels (shared by every series) for grouped trends. */
@@ -1015,6 +1243,12 @@ export class MetricsBuilder<T extends ObjectLiteral> {
       );
     } else {
       switch (this.period) {
+        case Period.HOUR:
+          this.eqFilter(where, params, 'year', this.year);
+          this.eqFilter(where, params, 'month', this.month);
+          this.eqFilter(where, params, 'day', this.day);
+          this.windowFilter(where, params, 'hour', this.hour, () => this.resolver().hourPeriod());
+          break;
         case Period.DAY:
           this.eqFilter(where, params, 'year', this.year);
           this.eqFilter(where, params, 'month', this.month);
@@ -1086,7 +1320,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
 
   private resolver(): PeriodResolver {
     return new PeriodResolver(
-      { year: this.year, month: this.month, day: this.day, week: this.week },
+      { year: this.year, month: this.month, day: this.day, week: this.week, hour: this.hour },
       this.windowCount,
     );
   }
@@ -1134,7 +1368,7 @@ function today(): string {
   return `${d.getFullYear()}-${month}-${day}`;
 }
 
-const VARIATION_PERIODS: Period[] = [Period.DAY, Period.WEEK, Period.MONTH, Period.YEAR];
+const VARIATION_PERIODS: Period[] = [Period.HOUR, Period.DAY, Period.WEEK, Period.MONTH, Period.YEAR];
 
 /** Pin a builder's reference point to `count` periods before now. */
 function shiftReference<T extends ObjectLiteral>(
@@ -1144,6 +1378,9 @@ function shiftReference<T extends ObjectLiteral>(
 ): void {
   const ago = DateTime.now();
   switch (period) {
+    case Period.HOUR:
+      builder.forHour(ago.minus({ hours: count }).hour);
+      break;
     case Period.DAY:
       builder.forDay(ago.minus({ days: count }).day);
       break;
@@ -1157,6 +1394,33 @@ function shiftReference<T extends ObjectLiteral>(
       builder.forYear(ago.minus({ years: count }).year);
       break;
   }
+}
+
+/**
+ * Merge two trend series onto a shared, sorted label axis. Labels that appear
+ * in only one series get `0` in the other.
+ */
+function mergeTrends(current: TrendsResult, prior: TrendsResult): TrendsComparisonResult {
+  const allLabels = new Set<(string | number)>();
+  current.labels.forEach((l) => allLabels.add(l));
+  prior.labels.forEach((l) => allLabels.add(l));
+
+  const sortedLabels = [...allLabels].sort((a, b) => {
+    if (typeof a === 'number' && typeof b === 'number') return a - b;
+    return String(a).localeCompare(String(b));
+  });
+
+  const curMap = new Map<string, number>();
+  current.labels.forEach((l, i) => curMap.set(String(l), current.data[i]));
+
+  const prevMap = new Map<string, number>();
+  prior.labels.forEach((l, i) => prevMap.set(String(l), prior.data[i]));
+
+  return {
+    labels: sortedLabels,
+    current: sortedLabels.map((l) => curMap.get(String(l)) ?? 0),
+    previous: sortedLabels.map((l) => prevMap.get(String(l)) ?? 0),
+  };
 }
 
 /** ISO-8601 week number for a JS Date (matches Luxon/Postgres/MySQL/SQLite). */
