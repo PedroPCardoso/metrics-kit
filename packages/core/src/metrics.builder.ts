@@ -87,6 +87,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   private fill = false;
   private missingValue = 0;
   private missingLabels: (string | number)[] = [];
+  private cumulativeData = false;
   private groupedLabels: (string | number)[] = [];
   private groupedAggregate: Aggregate = Aggregate.SUM;
   private caching: CacheOptions | null = null;
@@ -322,8 +323,28 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   }
 
   /**
+   * Convert each data series into a running total (cumulative sum). Works with
+   * both simple {@link TrendsResult} and {@link GroupedTrendsResult} (from
+   * {@link groupData}).
+   *
+   * @returns This builder, for chaining.
+   *
+   * @example
+   * ```ts
+   * const cumulative = await Metrics.query(orderRepo.createQueryBuilder('order'))
+   *   .countByMonth()
+   *   .cumulative()
+   *   .trends();
+   * // data: [2, 5, 8, ...] instead of [2, 3, 3, ...]
+   * ```
+   */
+  cumulative(): this {
+    this.cumulativeData = true;
+    return this;
+  }
+
+  /**
    * Split the aggregate column into one data series per value, for a stacked /
-   * multi-series chart. Each series counts the rows matching that value per
    * bucket (`aggregate(CASE WHEN column = value THEN 1 ELSE 0 END)`), and
    * `total` carries the main aggregate per bucket. {@link trends} then returns a
    * {@link GroupedTrendsResult} instead of a {@link TrendsResult}.
@@ -819,28 +840,34 @@ export class MetricsBuilder<T extends ObjectLiteral> {
    * ```
    */
   async trends(inPercent = false): Promise<TrendsResult | GroupedTrendsResult> {
+    let result: TrendsResult | GroupedTrendsResult;
+
     if (this.groupedLabels.length > 0) {
-      return this.groupedTrends(inPercent);
-    }
-
-    const rows = await this.trendsData();
-    const formatter = new TrendsFormatter(new LabelFormatter(this.locale));
-    const ctx = { year: this.year, month: this.month };
-
-    let series: TrendsResult;
-    if (this.fill && this.isPeriodMode()) {
-      // Date periods: fill the integer buckets, then format the labels.
-      series = formatter.format(gapFillRaw(rows, this.missingValue), this.period, ctx);
+      result = await this.groupedTrends(inPercent);
     } else {
-      // Category (labelColumn) and range labels are already final strings.
-      const labelPeriod = this.labelColumnName || this.range ? null : this.period;
-      series = formatter.format(rows, labelPeriod, ctx);
-      if (this.fill) {
-        series = populate(await this.canonicalLabels(), series, this.missingValue);
+      const rows = await this.trendsData();
+      const formatter = new TrendsFormatter(new LabelFormatter(this.locale));
+      const ctx = { year: this.year, month: this.month };
+
+      let series: TrendsResult;
+      if (this.fill && this.isPeriodMode()) {
+        series = formatter.format(gapFillRaw(rows, this.missingValue), this.period, ctx);
+      } else {
+        const labelPeriod = this.labelColumnName || this.range ? null : this.period;
+        series = formatter.format(rows, labelPeriod, ctx);
+        if (this.fill) {
+          series = populate(await this.canonicalLabels(), series, this.missingValue);
+        }
       }
+
+      result = inPercent ? toPercent(series) : series;
     }
 
-    return inPercent ? toPercent(series) : series;
+    if (this.cumulativeData && !this.groupedLabels.length) {
+      result = this.applyCumulative(result as TrendsResult);
+    }
+
+    return result;
   }
 
   /** Remove the cached entry for the current trends query shape. */
@@ -885,21 +912,47 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     const labelPeriod = this.labelColumnName || this.range ? null : this.period;
     const labels = canonical.map((label) => labelFormatter.format(label, labelPeriod, ctx));
 
-    const seriesFor = (field: string): number[] => {
-      const values = canonical.map((label) => {
+    const seriesFor = (field: string): number[] =>
+      canonical.map((label) => {
         const raw = byLabel.get(String(label));
         const row = isRecord(raw) ? raw : undefined;
         return row ? Number(row[field]) : this.missingValue;
       });
-      return inPercent ? percentArray(values) : values;
-    };
 
     const data: GroupedTrendsResult['data'] = { total: seriesFor('data') };
     this.groupedLabels.forEach((label, i) => {
       data[String(label)] = seriesFor(`data${i}`);
     });
 
-    return { labels, data };
+    let result: GroupedTrendsResult = { labels, data };
+
+    if (this.cumulativeData) {
+      result = this.groupedCumulative(result);
+    }
+
+    if (inPercent) {
+      const pct: Record<string, number[]> = {};
+      for (const [key, values] of Object.entries(result.data)) {
+        pct[key] = percentArray(values);
+      }
+      result = { labels: result.labels, data: pct as GroupedTrendsResult['data'] };
+    }
+
+    return result;
+  }
+
+  private applyCumulative(result: TrendsResult): TrendsResult {
+    let sum = 0;
+    return { labels: result.labels, data: result.data.map((v) => (sum += v)) };
+  }
+
+  private groupedCumulative(result: GroupedTrendsResult): GroupedTrendsResult {
+    const data: Record<string, number[]> = {};
+    for (const [key, values] of Object.entries(result.data)) {
+      let sum = 0;
+      data[key] = values.map((v) => (sum += v));
+    }
+    return { labels: result.labels, data: data as GroupedTrendsResult['data'] };
   }
 
   /** Canonical raw labels (shared by every series) for grouped trends. */
