@@ -25,6 +25,36 @@ export class TypeOrmBackend<T extends ObjectLiteral> implements QueryBackend {
   }
 
   async run(plan: QueryPlan): Promise<Row[]> {
+    const q = this.buildQuery(plan);
+    if (plan.tz) {
+      this.registerTz();
+    }
+    try {
+      return await q.getRawMany<Row>();
+    } catch (err) {
+      if (err instanceof MetricsError) {
+        throw err;
+      }
+      throw new QueryExecutionError(err, {
+        query: q.getSql(),
+        params: plan.params,
+        dialect: this.qb.connection.options.type,
+        operation: 'execute',
+      });
+    }
+  }
+
+  toSql(plan: QueryPlan, mask = false): string {
+    const q = this.buildQuery(plan);
+    const sql = q.getSql();
+    if (mask) {
+      const params = q.getParameters() as Record<string, unknown>;
+      return this.redactParams(sql, params);
+    }
+    return sql;
+  }
+
+  private buildQuery(plan: QueryPlan): SelectQueryBuilder<T> {
     const q = this.qb.clone();
     plan.select.forEach((item, i) => {
       if (i === 0) {
@@ -46,22 +76,16 @@ export class TypeOrmBackend<T extends ObjectLiteral> implements QueryBackend {
     if (plan.orderBy) {
       q.orderBy(plan.orderBy.expr, plan.orderBy.dir);
     }
-    if (plan.tz) {
-      this.registerTz();
-    }
-    try {
-      return await q.getRawMany<Row>();
-    } catch (err) {
-      if (err instanceof MetricsError) {
-        throw err;
-      }
-      throw new QueryExecutionError(err, {
-        query: q.getSql(),
-        params: plan.params,
-        dialect: this.qb.connection.options.type,
-        operation: 'execute',
-      });
-    }
+    return q;
+  }
+
+  private redactParams(sql: string, params: Record<string, unknown>): string {
+    return sql.replace(/:(\w+)/g, (_, name) => {
+      const value = params[name];
+      if (value === undefined) return `:${name}`;
+      if (typeof value === 'number') return '0';
+      return "'[REDACTED]'";
+    });
   }
 
   /** Bind the SQLite tz user-function when bucketing in a non-UTC timezone. */
