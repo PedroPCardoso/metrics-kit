@@ -31,7 +31,7 @@ The repo has three local doc files, plus the external readme.io site:
 | `docs/ARCHITECTURE.md` | Internal architecture — component layers, folder structure, design decisions, portability | Adding new internals, changing the engine, adding a new adapter (e.g. Prisma, Drizzle) |
 | `docs/RELEASING.md` | Release workflow — two-branch model, how to publish | Changing the release process, CI/CD, or changeset configuration |
 
-The readme.io site (English) mirrors `docs/GUIA-NESTJS.md`. When updating the local NestJS guide, also sync the `readme-docs` repo (see step 4).
+The readme.io site (English) mirrors `docs/GUIA-NESTJS.md`. When updating the local NestJS guide, also sync the `metrics-kit-docs` repo (see step 4).
 
 ### 3. Update the chosen doc(s)
 
@@ -42,9 +42,9 @@ The readme.io site (English) mirrors `docs/GUIA-NESTJS.md`. When updating the lo
 
 Follow the existing doc style — code blocks with TypeScript, live examples, and short explanations.
 
-### 4. Sync to readme-docs (after merging)
+### 4. Sync to metrics-kit-docs (after merging)
 
-The readme.io English site is driven by the **`PedroPCardoso/readme-docs`** GitHub repo, branch `v1.0`. The file to update is:
+The readme.io English site is driven by the **`PedroPCardoso/metrics-kit-docs`** GitHub repo, branch `v1.0`. The file to update is:
 
 ```
 docs/Getting Started/getting-started.md
@@ -69,7 +69,7 @@ hidden: false
 3. Prepend the frontmatter block above.
 4. Get the current SHA of the file:
    ```bash
-   gh api "repos/PedroPCardoso/readme-docs/contents/docs/Getting%20Started/getting-started.md?ref=v1.0" | python3 -c "import json,sys; print(json.load(sys.stdin)['sha'])"
+   gh api "repos/PedroPCardoso/metrics-kit-docs/contents/docs/Getting%20Started/getting-started.md?ref=v1.0" | python3 -c "import json,sys; print(json.load(sys.stdin)['sha'])"
    ```
 5. Push the new content via the GitHub API:
    ```python
@@ -80,11 +80,11 @@ hidden: false
    frontmatter = "---\ntitle: Complete Guide — nestjs-metrics\nexcerpt: >-\n  Generate metrics and trends from TypeORM entities, with a fluent API and\n  NestJS integration.\nhidden: false\n---\n"
    encoded = base64.b64encode((frontmatter + body).encode()).decode()
    payload = json.dumps({"message": "docs: sync with metrics-kit", "content": encoded, "sha": "<current_sha>", "branch": "v1.0"})
-   subprocess.run(['gh', 'api', '--method', 'PUT', 'repos/PedroPCardoso/readme-docs/contents/docs/Getting%20Started/getting-started.md', '--input', '-'], input=payload, text=True)
+   subprocess.run(['gh', 'api', '--method', 'PUT', 'repos/PedroPCardoso/metrics-kit-docs/contents/docs/Getting%20Started/getting-started.md', '--input', '-'], input=payload, text=True)
    ```
 
 ## Completion criteria
 
 - Every new or changed public API item has a corresponding entry in the local docs.
 - The codebase's `docs/` directory is committed with the feature.
-- `PedroPCardoso/readme-docs` branch `v1.0` is updated to mirror the new `docs/GUIA-NESTJS.md`.
+- `PedroPCardoso/metrics-kit-docs` branch `v1.0` is updated to mirror the new `docs/GUIA-NESTJS.md`.
