@@ -23,12 +23,12 @@ await prismaMetrics(prisma, { table: 'orders', dateColumn: 'created_at', dialect
 
 ## Features
 
-- **Prisma & Drizzle adapters** in one package, with isolated subpaths so importing one never loads the other.
+- **Prisma, Drizzle & Kysely adapters** in one package, with isolated subpaths so importing one never loads the others.
 - **Typed schema inference** for Drizzle — pass table/column objects and the dialect is detected automatically.
-- **Database portability** — same API on PostgreSQL, MySQL/MariaDB and SQLite.
+- **Database portability** — same API on PostgreSQL, MySQL/MariaDB, SQLite, and SQL Server (MSSQL).
 - **Locale & timezone aware** — translated labels and DST-correct bucketing.
-- **Chart-ready output** — `trends()` returns `{ labels, data }` ready for chart libraries.
-- **Built-in helpers** — `fillMissingData`, `groupData`, `metricsWithVariations`, percentage trends.
+- **Chart-ready output** — `trends()` returns `{ labels, data }` ready for chart libraries, with `toChartJs` / `toApexCharts` / `toRecharts` helpers.
+- **Built-in helpers** — `fillMissingData`, `groupData` (with auto-discover), `countDistinct`, `cumulative`, `metricsWithVariations`, `trendsWithComparison`, percentage trends.
 
 ## Installation
 
@@ -91,6 +91,24 @@ await drizzleMetrics(db, { table: 'orders', dateColumn: 'created_at', dialect: '
 Runs through the underlying driver Drizzle wraps (`db.$client`): `better-sqlite3`,
 `node-postgres`, or `mysql2`.
 
+## Kysely
+
+```ts
+import { kyselyMetrics } from 'nextjs-metrics/kysely';
+
+const builder = kyselyMetrics(db, {
+  table: 'orders',
+  dateColumn: 'created_at',
+  dialect: 'postgres',          // 'postgres' | 'mysql' | 'sqlite' | 'mssql'
+  where: { status: 'paid' },    // optional structured filter
+});
+
+await builder.sumByMonth('amount').forYear(2026).fillMissingData().trends();
+```
+
+`kyselyMetrics` accepts any Kysely instance (duck-typed via `executeQuery`). The
+dialect must be stated explicitly because Kysely does not expose it at runtime.
+
 ## Filters
 
 `where` supports equality, `IN`, range and `IS NULL`:
@@ -104,6 +122,37 @@ Runs through the underlying driver Drizzle wraps (`db.$client`): `better-sqlite3
 
 For joins the structured shape can't express, pass a raw `from` fragment (a
 **trusted developer surface** — never interpolate user input).
+
+## Chart Helpers
+
+```ts
+import { toChartJs, toApexCharts, toRecharts } from 'nextjs-metrics';
+
+const trends = await prismaMetrics(prisma, { table: 'orders', dateColumn: 'created_at', dialect: 'postgres' })
+  .countByMonth()
+  .forYear(2026)
+  .trends();
+
+// Chart.js
+const chartJsConfig = toChartJs(trends, { label: 'Orders', type: 'line' });
+
+// ApexCharts
+const apexConfig = toApexCharts(trends, { name: 'Orders' });
+
+// Recharts
+const rechartsData = toRecharts(trends);
+// → [{ label: 'January', value: 10 }, ...]
+```
+
+All three helpers also accept `GroupedTrendsResult` and `TrendsComparisonResult`.
+
+## SQL Introspection (toSql)
+
+```ts
+const sql = builder.toSql();                   // rendered SQL with values
+const sql = builder.toSql({ mask: true });     // values redacted for logs
+const trendsSql = builder.toTrendsSql();       // trends variant
+```
 
 ## Variations
 
@@ -132,8 +181,9 @@ without hand-writing date-bucketing SQL for every chart.
 
 ## Notes
 
-- **Timezone:** Postgres/MySQL get full timezone-aware bucketing; SQLite is
-  UTC-only in the executor mode (a non-UTC timezone throws).
+- **Dialects:** `'postgres'`, `'mysql'`, `'sqlite'`, and `'mssql'` (SQL Server) are supported. MSSQL uses `DATEPART` / `CONVERT` / `AT TIME ZONE`.
+- **Timezone:** Postgres/MySQL/MSSQL get full timezone-aware bucketing; SQLite is
+  UTC-only in executor mode (a non-UTC timezone throws).
 - **Safety:** identifiers are validated against an allowlist and quoted per
   dialect; all values bind as parameters.
 
