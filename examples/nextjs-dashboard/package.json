@@ -8,7 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
-    "better-sqlite3": "^11",
+    "better-sqlite3": "^12",
     "chart.js": "^4.5.1",
     "drizzle-orm": "^0",
     "luxon": "^3",
