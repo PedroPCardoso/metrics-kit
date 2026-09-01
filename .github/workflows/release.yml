@@ -30,7 +30,7 @@ jobs:
 
       # Opens/updates a "Version Packages" PR; when that PR is merged, publishes.
       - name: Create release PR or publish
-        uses: changesets/action@v1
+        uses: changesets/action@v2
         with:
           publish: npm run release
         env:
