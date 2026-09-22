@@ -7,7 +7,7 @@ import { InvalidVariationsCountException } from './exceptions/invalid-variations
 import { ConfigurationError } from './exceptions/configuration.exception';
 import { UnsupportedInRowsModeException } from './exceptions/unsupported-in-rows-mode.exception';
 import { assertAggregate, assertDateFormat, assertSafeIdentifier, assertTimezone } from './validation';
-import { validateExecutorSpec, validateMetricsOptions } from './options.schema';
+import { validateExecutorSpec, validateMetricsOptions, validateRowsSpec } from './options.schema';
 import { dialectFor } from './dialects/dialect.factory';
 import { DatePart } from './dialects/sql-dialect.interface';
 import { QueryBackend } from './backend/query-backend.interface';
@@ -276,6 +276,10 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     spec: RowsSpec = {},
     options?: MetricsOptions,
   ): MetricsBuilder<ObjectLiteral> {
+    if (!MetricsBuilder.skipValidation) {
+      spec = validateRowsSpec(spec);
+      validateMetricsOptions(options ?? {});
+    }
     if (options?.cache?.enabled) {
       throw new ConfigurationError(
         'nestjs-metrics: caching is not supported with fromRows() — in-memory rows have no stable query identity to key a cache entry on.',

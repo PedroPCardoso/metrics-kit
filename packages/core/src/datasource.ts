@@ -1,4 +1,4 @@
-import type { ExecutorSpec as ZodExecutorSpec } from './options.schema';
+import type { ExecutorSpec as ZodExecutorSpec, RowsSpec as ZodRowsSpec } from './options.schema';
 
 /** One raw result row, keyed by select alias. */
 export type Row = Record<string, unknown>;
@@ -28,7 +28,4 @@ export interface DataSource {
 export type ExecutorSpec = ZodExecutorSpec;
 
 /** Spec for the in-memory rows entry point (MetricsBuilder.fromRows). */
-export interface RowsSpec {
-  /** The row property holding the bucketing date. Default: 'created_at'. */
-  dateColumn?: string;
-}
+export type RowsSpec = ZodRowsSpec;

@@ -77,6 +77,11 @@ export const ExecutorSpecSchema = z.object({
   from: z.string().min(1).optional(),
 });
 
+/** Zod schema validating {@link RowsSpec} passed to `fromRows`. */
+export const RowsSpecSchema = z.object({
+  dateColumn: IdentifierSchema.optional(),
+});
+
 /** Zod schema validating {@link MetricsModuleOptions} for the NestJS module. */
 export const MetricsModuleOptionsSchema = z.object({
   locale: LocaleSchema.optional(),
@@ -93,6 +98,8 @@ export type MetricsOptions = z.infer<typeof MetricsOptionsSchema>;
  * for joins/subqueries the structured shape can't express.
  */
 export type ExecutorSpec = z.infer<typeof ExecutorSpecSchema>;
+/** Declares which row property `fromRows` buckets on. Defaults to `'created_at'`. */
+export type RowsSpec = z.infer<typeof RowsSpecSchema>;
 /** Module-wide defaults for `MetricsModule.forRoot`: a BCP-47 `locale` and IANA `timezone`. */
 export type MetricsModuleOptions = z.infer<typeof MetricsModuleOptionsSchema>;
 
@@ -141,6 +148,23 @@ export function validateExecutorSpec(input: unknown): ExecutorSpec {
   if (!result.success) {
     throw new ValidationError(
       `Invalid ExecutorSpec:\n${formatIssues(result.error.issues)}`,
+      result.error.issues,
+    );
+  }
+  return result.data;
+}
+
+/**
+ * Validate and narrow an unknown value to {@link RowsSpec}.
+ * @param input - The value to validate.
+ * @returns The parsed spec.
+ * @throws {@link ValidationError} when `input` does not match the schema.
+ */
+export function validateRowsSpec(input: unknown): RowsSpec {
+  const result = RowsSpecSchema.safeParse(input);
+  if (!result.success) {
+    throw new ValidationError(
+      `Invalid RowsSpec:\n${formatIssues(result.error.issues)}`,
       result.error.issues,
     );
   }

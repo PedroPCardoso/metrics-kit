@@ -3,7 +3,9 @@ import { MetricsBuilder } from '@core/metrics.builder';
 import { Period } from '@core/enums/period.enum';
 import { UnsupportedInRowsModeException } from '@core/exceptions/unsupported-in-rows-mode.exception';
 import { ConfigurationError } from '@core/exceptions/configuration.exception';
+import { InvalidIdentifierException } from '@core/exceptions/invalid-identifier.exception';
 import { MetricsError } from '@core/exceptions/metrics.error';
+import { ValidationError } from '@core/options.schema';
 
 const rows = [
   { id: 1, created_at: '2026-01-10', amount: 100, status: 'paid', member_id: 1 },
@@ -112,5 +114,40 @@ describe('MetricsBuilder.fromRows', () => {
   it('invalidate* are harmless no-ops in rows mode', async () => {
     await expect(build().count().invalidateMetrics()).resolves.toBeUndefined();
     await expect(build().countByMonth().invalidateTrends()).resolves.toBeUndefined();
+  });
+
+  it('validates the RowsSpec dateColumn as a plain identifier', () => {
+    expect(() => MetricsBuilder.fromRows(rows, { dateColumn: 'created_at; DROP TABLE orders' })).toThrow(
+      ValidationError,
+    );
+  });
+
+  it('validates MetricsOptions the same way queryExecutor does', () => {
+    expect(() =>
+      MetricsBuilder.fromRows(rows, {}, { locale: 'not a locale!!' }),
+    ).toThrow(ValidationError);
+  });
+
+  it('validation is skippable via MetricsBuilder.skipValidation, like every other entry point', () => {
+    MetricsBuilder.skipValidation = true;
+    try {
+      // Even invalid options are accepted when Zod validation is skipped.
+      expect(() =>
+        MetricsBuilder.fromRows(rows, {}, { locale: 'not a locale!!' as never }),
+      ).not.toThrow();
+    } finally {
+      MetricsBuilder.skipValidation = false;
+    }
+  });
+
+  it('does not let skipValidation bypass identifier safety, matching queryExecutor', () => {
+    MetricsBuilder.skipValidation = true;
+    try {
+      expect(() =>
+        MetricsBuilder.fromRows(rows, { dateColumn: 'created_at; DROP TABLE orders' }),
+      ).toThrow(InvalidIdentifierException);
+    } finally {
+      MetricsBuilder.skipValidation = false;
+    }
   });
 });
