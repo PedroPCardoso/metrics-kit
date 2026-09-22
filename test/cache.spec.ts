@@ -33,6 +33,34 @@ describe('cache keys', () => {
 
     expect(planCacheKey(plan, 'tenant-a')).toMatch(/^tenant-a:mk:v1:[a-f0-9]{32}$/);
   });
+
+  it('produces different keys for plans that differ only in their where/scope filter', () => {
+    const base: QueryPlan = {
+      source: 'orders',
+      select: [{ expr: 'COUNT("orders"."id")', alias: 'data' }],
+      where: [],
+      params: {},
+    };
+
+    const tenantA: QueryPlan = {
+      ...base,
+      where: ['"orders"."tenant_id" IN (:tenant_0)'],
+      params: { tenant_0: 1 },
+    };
+
+    const tenantB: QueryPlan = {
+      ...base,
+      where: ['"orders"."tenant_id" IN (:tenant_0)'],
+      params: { tenant_0: 2 },
+    };
+
+    // The whole plan (including where/params) is hashed, so two builders
+    // identical except for their .whereIn() scope must never share a cache
+    // key — this is what keeps one tenant's cached aggregate from leaking to
+    // another.
+    expect(planCacheKey(tenantA)).not.toBe(planCacheKey(tenantB));
+    expect(planCacheKey(tenantA)).not.toBe(planCacheKey(base));
+  });
 });
 
 describe('cache — metrics()', () => {
