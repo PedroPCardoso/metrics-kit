@@ -48,9 +48,18 @@ Peer dependencies — both **optional**, install what you actually use:
 `nestjs-metrics-core` is installed automatically.
 
 Using a non-TypeORM stack (Kysely, Prisma, Drizzle, raw SQL)? Install without
-`typeorm` and use `Metrics.queryExecutor(...)` or `Metrics.fromRows(...)` — or
-depend on [`nestjs-metrics-core`](https://www.npmjs.com/package/nestjs-metrics-core)
-directly if you don't need the NestJS module at all.
+`typeorm`. `MetricsService` exposes `queryExecutor()` and `fromRows()` alongside
+`query()`, so you still get the module's configured locale/timezone/cache
+defaults:
+
+```ts
+// in a provider
+this.metrics.queryExecutor(dataSource, { table: 'orders' }).sumByMonth('amount').trends();
+this.metrics.fromRows(rowsYouAlreadyFetched, { dateColumn: 'created_at' }).countByMonth().trends();
+```
+
+If you don't need the NestJS module at all, depend on
+[`nestjs-metrics-core`](https://www.npmjs.com/package/nestjs-metrics-core) directly.
 
 ## Quick start
 

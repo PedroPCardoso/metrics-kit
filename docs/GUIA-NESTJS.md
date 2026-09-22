@@ -135,6 +135,33 @@ this.metrics
   .trends();
 ```
 
+### `.queryExecutor()` and `.fromRows()` — without TypeORM
+
+The service is not TypeORM-only. Both ORM-agnostic entry points are available on
+it, so an app running Kysely, Prisma, Drizzle or raw SQL still gets the module's
+configured `locale`/`timezone`/`cache` defaults instead of re-passing them on
+every call:
+
+```typescript
+// Any SQL driver
+this.metrics
+  .queryExecutor(dataSource, { table: 'orders', dateColumn: 'created_at' })
+  .sumByMonth('amount', 6)
+  .trends();
+
+// Rows your own (scoped) query layer already fetched
+const rows = await this.scopedQuery.selectFrom('orders').selectAll().execute();
+this.metrics
+  .fromRows(rows, { dateColumn: 'created_at' })
+  .sumByMonth('amount', 6)
+  .trends();
+```
+
+> The module's `cache` default is **not** applied to `.fromRows()` — in-memory
+> rows have no stable query identity to key a cache entry on, so a module-wide
+> cache setting would otherwise make every rows-mode call throw. Passing `cache`
+> explicitly at the call site still throws `ConfigurationError`.
+
 ### Option precedence (locale/timezone)
 
 **call-site** > **forFeature** > **forRoot** > **default (`'en'`, `'UTC'`)**
