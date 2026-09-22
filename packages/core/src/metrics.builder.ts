@@ -12,7 +12,7 @@ import { ColumnRef, Filter, SelectExpr, SemanticPlan } from './backend/semantic-
 import { TypeOrmBackend } from './backend/typeorm.backend';
 import { ExecutorBackend } from './backend/executor.backend';
 import { DataSource, ExecutorSpec } from './datasource';
-import { WhereCondition, WhereInput } from './where';
+import { WhereCondition, WhereInput, WhereScalar } from './where';
 import { normalizeData, normalizeLabel } from './formatting/normalize';
 import { PeriodResolver } from './dates/period-resolver';
 import { enumerateBuckets } from './dates/bucket-series';
@@ -142,7 +142,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   /** Store structured executor-mode filters (set by queryExecutor). */
   private applyExecutorWhere(where: WhereInput): void {
     for (const [column, condition] of Object.entries(where)) {
-      this.extraWhere.push({ column: this.ref(column), condition });
+      this.where(column, condition);
     }
   }
 
@@ -179,6 +179,23 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   labelColumn(column: string): this {
     this.labelColumnRef = this.ref(column);
     return this;
+  }
+
+  /**
+   * AND a structured condition onto every query: scalar = equality, array = IN
+   * (empty array matches nothing — fail closed), object = range (gte/lte/gt/lt),
+   * null = IS NULL. Values always bind as parameters; the column name is
+   * validated (assertSafeIdentifier) and driver-escaped. Chain multiple calls
+   * to AND conditions. This is the hook for scoping/visibility gates.
+   */
+  where(column: string, condition: WhereCondition): this {
+    this.extraWhere.push({ column: this.ref(column), condition });
+    return this;
+  }
+
+  /** Sugar for `where(column, values)`: membership with bound parameters. */
+  whereIn(column: string, values: WhereScalar[]): this {
+    return this.where(column, values);
   }
 
   /**
