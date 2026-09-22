@@ -312,25 +312,13 @@ O original usa `selectRaw('avg(col) as data, ...')` e bindings posicionais (`?`)
 `builder.getConnection().getDriverName()` → `dataSource.options.type` (`postgres`/`mysql`/`mariadb`/`sqlite`/`better-sqlite3`). `DialectFactory.for(type)` retorna a estratégia certa; `mariadb` mapeia para `MySqlDialect`.
 
 ### 6.4 Abstração de ORM — **extraída (Decisão 1, cumprida)**
-A interface foi extraída quando o 2º backend surgiu, não desenhada especulativamente. O core é **dual-mode** por trás de `QueryBackend`: o builder monta um `QueryPlan` backend-neutro (select/where/group/order + params `:name`), e um backend o renderiza:
+A interface foi extraída quando o 2º backend surgiu, não desenhada especulativamente. O core é **dual-mode** por trás de `QueryBackend`: o builder monta um `SemanticPlan` dialeto-agnóstico (intenção da query), e `renderPlan()` o transforma no `QueryPlan` SQL (select/where/group/order + params `:name`) que os backends SQL renderizam:
 - **`TypeOrmBackend`** — o caminho original, sobre o `SelectQueryBuilder`, com comportamento e escaping do driver **inalterados**.
 - **`ExecutorBackend`** — monta um SQL cru parametrizado e o executa via um `DataSource` agnóstico `(sql, params) => rows` (Prisma/Drizzle/qualquer driver). Placeholders `:name` viram posicionais (`$n` no Postgres, `?` no MySQL/SQLite); tipos crus do driver passam por `normalize()` no boundary.
 
+`RowsBackend` interpreta o `SemanticPlan` diretamente, sem nunca passar por `renderPlan()`/`QueryPlan` (ver §6.9 para o desenho atual de três backends).
+
 A `SqlDialect` strategy existe desde o dia 1 (os três dialetos coexistem) e ganhou `escapeId`/`placeholder` para o modo executor.
-
-### 6.9 SemanticPlan / renderPlan / RowsBackend — arquitetura de três backends
-
-O builder fluente não emite SQL diretamente; ele constrói um **`SemanticPlan`** (em `backend/semantic-plan.ts`) que captura a intenção semântica da query: período, agregação, colunas, filtros WHERE estruturados, label, groupData — tudo dialeto-agnóstico.
-
-Três backends interpretam o plano:
-
-1. **`renderPlan()` (em `backend/render-plan.ts`)** — renderiza SQL parametrizado para TypeORM e Executor (Postgres, MySQL, SQLite). Saída: string SQL cru + mapa de parâmetros `:name`. SQL é **snapshot-locked**: qualquer mudança de output é capturada por snapshots de teste.
-
-2. **`RowsBackend` (em `backend/rows.backend.ts`)** — interpreta o plano **em memória**, sobre um array de objetos: itera as linhas, aplica filtros WHERE, extrai períodos com `luxon.DateTime` (timezone-aware, DST-correto), agrega com `reduce()`, preenche lacunas no calendário, formata labels. **Equivalência-testada**: a suíte equivalence-test (Task 6) roda o mesmo plano nos três backends e valida que as saídas numéricas/labels são idênticas.
-
-A invariante de qualidade: SQL é imutável (snapshot-locked); RowsBackend é equivalência-trancado aos SQL backends (nenhum dos dois pode divergir sem falha).
-
-`fromRows()` instancia `RowsBackend` direto; `query()` e `queryExecutor()` instanciam `renderPlan()` e delegam ao driver.
 
 ### 6.7 Segurança de identificadores (Decisão 2)
 `column`/`table`/`dateColumn`/`labelColumn` são interpolados crus no SQL (herança do original). Como é uma lib pública e parâmetros nomeados **não** protegem identificadores, todo identificador passa por `assertSafeIdentifier()` (allowlist `^[a-zA-Z_][a-zA-Z0-9_.]*$`) + escape (driver no `TypeOrmBackend`, `dialect.escapeId` no `ExecutorBackend`) antes de entrar no SQL. Valores fluem **somente** como parâmetros ligados. Documenta-se que o ideal continua sendo input controlado pelo dev.
@@ -345,6 +333,20 @@ Carbon `->locale(x)->monthName` → Luxon `DateTime.fromObject({...},{locale}).t
 
 ### 6.6 Decimais
 SQLite/Postgres podem retornar agregados como string. Normalizar via `Number()`/`parseFloat` no `AggregateRunner`, como o `(float)` do PHP.
+
+### 6.9 SemanticPlan / renderPlan / RowsBackend — arquitetura de três backends
+
+O builder fluente não emite SQL diretamente; ele constrói um **`SemanticPlan`** (em `backend/semantic-plan.ts`) que captura a intenção semântica da query: período, agregação, colunas, filtros WHERE estruturados, label, groupData — tudo dialeto-agnóstico.
+
+Três backends interpretam o plano:
+
+1. **`renderPlan()` (em `backend/render-plan.ts`)** — renderiza SQL parametrizado para TypeORM e Executor (Postgres, MySQL, SQLite). Saída: string SQL cru + mapa de parâmetros `:name`. SQL é **snapshot-locked**: qualquer mudança de output é capturada por snapshots de teste.
+
+2. **`RowsBackend` (em `backend/rows.backend.ts`)** — interpreta o plano **em memória**, sobre um array de objetos: itera as linhas, aplica filtros WHERE, extrai períodos com `luxon.DateTime` (timezone-aware, DST-correto), agrega com `reduce()`, preenche lacunas no calendário, formata labels. **Equivalência-testada**: a suíte equivalence-test (Task 6) roda o mesmo plano nos três backends e valida que as saídas numéricas/labels são idênticas.
+
+A invariante de qualidade: SQL é imutável (snapshot-locked); RowsBackend é equivalência-trancado aos SQL backends (nenhum dos dois pode divergir sem falha).
+
+`fromRows()` instancia `RowsBackend` direto; `query()` e `queryExecutor()` instanciam `renderPlan()` e delegam ao driver.
 
 ---
 
