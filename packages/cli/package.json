@@ -59,6 +59,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "commander": "^12.1.0"
+    "commander": "^15.0.0"
   }
 }
