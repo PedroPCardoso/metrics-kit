@@ -55,7 +55,10 @@ import { Metrics, metricsFor, withMetrics } from 'nestjs-metrics';
 await Metrics.query(orderRepo.createQueryBuilder('orders')).sum('amount').byMonth().forYear(2026).trends();
 ```
 
-The full fluent API lives in [`nestjs-metrics-core`](../core).
+The full fluent API lives in [`nestjs-metrics-core`](../core) — including
+structured query scoping (`where` / `whereIn`) and the `fromRows()` entry point
+for in-memory row analysis. Both features work transparently through this package
+(the builder is re-exported unchanged).
 
 ## License
 

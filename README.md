@@ -68,6 +68,11 @@ See each package's README for the full API. Intentional differences from the
 original Laravel library are in [DIVERGENCES.md](./DIVERGENCES.md); architecture in
 [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
 
+**Key features:** Scoping with `where()`/`whereIn()` structured AND filters
+(bound parameters, empty IN fails closed) and a `fromRows()` entry point for
+in-memory analysis of raw SQL results — see [`nestjs-metrics-core`](packages/core)
+for complete examples and API reference.
+
 ## Development
 
 npm-workspaces monorepo. Everything runs in Docker:

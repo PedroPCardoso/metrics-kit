@@ -79,7 +79,10 @@ For joins the structured shape can't express, pass a raw `from` fragment (a
   dialect; all values bind as parameters.
 
 The standalone engine (incl. `Metrics`/`metricsFor`) is also re-exported here, and
-documented in [`nestjs-metrics-core`](../core).
+documented in [`nestjs-metrics-core`](../core). Both adapter subpaths support
+structured query scoping (`where` / `whereIn`) and the `fromRows()` entry point
+for in-memory row analysis — the full fluent API is available unchanged through
+all three entry points (`prismaMetrics`, `drizzleMetrics`, and `Metrics`).
 
 ## License
 

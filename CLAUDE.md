@@ -63,3 +63,5 @@ API quick reference:
   the period WHERE filter still applies**. To group by a column scoped to a year, use
   `sumByYear('amount', 1).forYear(YYYY).labelColumn('status')` rather than mixing a
   month window with `labelColumn`.
+- `where(col, cond)` / `whereIn(col, values)` — structured AND filters, bound params, empty IN ⇒ nothing.
+- `fromRows(rows, {dateColumn})` — in-memory backend, full parity, tz-aware bucketing.
