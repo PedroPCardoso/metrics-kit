@@ -1,5 +1,5 @@
 import { SqlDialect } from '../dialects/sql-dialect.interface';
-import { compileWhere, WhereInput } from '../where';
+import { WhereInput } from '../where';
 import { ColumnRef, SelectExpr, SemanticPlan } from './semantic-plan';
 import { QueryPlan, SelectItem } from './query-plan';
 
@@ -76,7 +76,7 @@ export function renderPlan(
   }
   if (whereEntries.length > 0) {
     // compileWhere keys by column name; qualify per-entry to keep each ref's table.
-    const compiled = compileWhereOrdered(whereEntries, qualify, Object.keys(params));
+    const compiled = compileWhereOrdered(whereEntries, qualify);
     where.push(...compiled.fragments);
     Object.assign(params, compiled.params);
   }
@@ -104,7 +104,6 @@ export function renderPlan(
 function compileWhereOrdered(
   entries: [ColumnRef, WhereInput[string]][],
   qualify: (ref: ColumnRef) => string,
-  _reserved: string[],
 ): { fragments: string[]; params: Record<string, unknown> } {
   const fragments: string[] = [];
   const params: Record<string, unknown> = {};
