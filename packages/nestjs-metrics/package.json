@@ -76,6 +76,9 @@
   "peerDependenciesMeta": {
     "@nestjs/common": {
       "optional": true
+    },
+    "typeorm": {
+      "optional": true
     }
   }
 }

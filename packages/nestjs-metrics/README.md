@@ -36,15 +36,21 @@ this.metrics
 ## Installation
 
 ```bash
-npm install nestjs-metrics typeorm
+npm install nestjs-metrics typeorm   # typeorm only if you use the TypeORM path
 ```
 
-Peer dependencies (your project already has them):
+Peer dependencies — both **optional**, install what you actually use:
 
-- `@nestjs/common` ^10 || ^11
-- `typeorm` ^0.3
+- `@nestjs/common` ^10 || ^11 — only for the `nestjs-metrics/nestjs` module/service.
+- `typeorm` ^0.3 — only for the `Metrics.query(qb)` / `metricsFor` / `withMetrics`
+  paths. Nothing in this package imports it at runtime; it is a type-only reference.
 
 `nestjs-metrics-core` is installed automatically.
+
+Using a non-TypeORM stack (Kysely, Prisma, Drizzle, raw SQL)? Install without
+`typeorm` and use `Metrics.queryExecutor(...)` or `Metrics.fromRows(...)` — or
+depend on [`nestjs-metrics-core`](https://www.npmjs.com/package/nestjs-metrics-core)
+directly if you don't need the NestJS module at all.
 
 ## Quick start
 
