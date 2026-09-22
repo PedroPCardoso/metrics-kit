@@ -1,6 +1,6 @@
 {
   "name": "nestjs-metrics",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "Generate chart-ready metrics and trends from your TypeORM entities in NestJS. Fluent API, locale/timezone-aware bucketing, PostgreSQL/MySQL/SQLite.",
   "keywords": [
     "nestjs",
