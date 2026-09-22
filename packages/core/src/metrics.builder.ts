@@ -6,13 +6,13 @@ import { InvalidPeriodException } from './exceptions/invalid-period.exception';
 import { InvalidVariationsCountException } from './exceptions/invalid-variations-count.exception';
 import { assertAggregate, assertDateFormat, assertSafeIdentifier, assertTimezone } from './validation';
 import { dialectFor } from './dialects/dialect.factory';
-import { DatePart, SqlDialect } from './dialects/sql-dialect.interface';
+import { DatePart } from './dialects/sql-dialect.interface';
 import { QueryBackend } from './backend/query-backend.interface';
-import { QueryPlan, SelectItem } from './backend/query-plan';
+import { ColumnRef, Filter, SelectExpr, SemanticPlan } from './backend/semantic-plan';
 import { TypeOrmBackend } from './backend/typeorm.backend';
 import { ExecutorBackend } from './backend/executor.backend';
 import { DataSource, ExecutorSpec } from './datasource';
-import { compileWhere, CompiledWhere, WhereInput } from './where';
+import { WhereCondition, WhereInput } from './where';
 import { normalizeData, normalizeLabel } from './formatting/normalize';
 import { PeriodResolver } from './dates/period-resolver';
 import { enumerateBuckets } from './dates/bucket-series';
@@ -37,12 +37,11 @@ const DEFAULT_TIMEZONE = 'UTC';
  */
 export class MetricsBuilder<T extends ObjectLiteral> {
   private tableName: string;
-  private readonly dialect: SqlDialect;
   private readonly locale: string;
   private readonly timezone: string;
   private aggregateFn: Aggregate = Aggregate.COUNT;
-  private column: string;
-  private dateColumnRef: string;
+  private columnRef: ColumnRef;
+  private dateColumnName: ColumnRef;
   private period: Period | null = null;
   /** Window size for the period (0 = whole period). Named to avoid colliding with the count() aggregate method. */
   private windowCount = 0;
@@ -51,9 +50,9 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   /** Granularity used to bucket a date range. */
   private groupBy: DatePart = 'day';
   /** Categorical column to group by instead of a date period. */
-  private labelColumnName: string | null = null;
+  private labelColumnRef: ColumnRef | null = null;
   /** Structured executor-mode filters (ANDed onto every query). */
-  private extraFilters: CompiledWhere | null = null;
+  private extraWhere: { column: ColumnRef; condition: WhereCondition }[] = [];
   private fill = false;
   private missingValue = 0;
   private missingLabels: (string | number)[] = [];
@@ -71,27 +70,24 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     options: MetricsOptions = {},
   ) {
     this.tableName = tableName;
-    this.dialect = backend.dialect;
     this.locale = options.locale ?? DEFAULT_LOCALE;
     this.timezone = options.timezone ?? DEFAULT_TIMEZONE;
     assertTimezone(this.timezone);
-    this.column = this.qualify('id');
-    this.dateColumnRef = this.qualify('created_at');
+    this.columnRef = this.ref('id');
+    this.dateColumnName = this.ref('created_at');
   }
 
   /**
-   * Single choke point that turns a bare column name into a table-qualified,
-   * driver-escaped identifier. Every consumer-supplied identifier passes through
-   * here: it is validated against the allowlist and then escaped, so it can
-   * never inject SQL (named parameters do not protect identifiers).
+   * Single choke point that turns a bare column name into a validated,
+   * table-captured reference. Every consumer-supplied identifier passes
+   * through here: it is validated against the allowlist so it can never
+   * inject SQL (named parameters do not protect identifiers). The table is
+   * captured at the time the column is configured, so a later .table() call
+   * does not retroactively re-qualify earlier columns.
    */
-  private qualify(column: string): string {
+  private ref(column: string): ColumnRef {
     assertSafeIdentifier(column);
-    return `${this.escapeId(this.tableName)}.${this.escapeId(column)}`;
-  }
-
-  private escapeId(name: string): string {
-    return this.backend.escapeId(name);
+    return { table: this.tableName, column };
   }
 
   /**
@@ -106,10 +102,10 @@ export class MetricsBuilder<T extends ObjectLiteral> {
       timezone: this.timezone,
     });
     clone.aggregateFn = this.aggregateFn;
-    clone.column = this.column;
-    clone.dateColumnRef = this.dateColumnRef;
+    clone.columnRef = this.columnRef;
+    clone.dateColumnName = this.dateColumnName;
     clone.tableName = this.tableName;
-    clone.extraFilters = this.extraFilters;
+    clone.extraWhere = [...this.extraWhere];
     return clone;
   }
 
@@ -143,9 +139,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return builder;
   }
 
-  /** Compile and store structured executor-mode filters (set by queryExecutor). */
+  /** Store structured executor-mode filters (set by queryExecutor). */
   private applyExecutorWhere(where: WhereInput): void {
-    this.extraFilters = compileWhere(where, (column) => this.qualify(column));
+    for (const [column, condition] of Object.entries(where)) {
+      this.extraWhere.push({ column: this.ref(column), condition });
+    }
   }
 
   // --- Aggregates ---------------------------------------------------------
@@ -153,7 +151,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   private aggregate(fn: Aggregate, column: string): this {
     assertAggregate(fn);
     this.aggregateFn = fn;
-    this.column = this.qualify(column);
+    this.columnRef = this.ref(column);
     return this;
   }
 
@@ -165,13 +163,13 @@ export class MetricsBuilder<T extends ObjectLiteral> {
 
   /** Bucket by a date column other than `created_at`. */
   dateColumn(column: string): this {
-    this.dateColumnRef = this.qualify(column);
+    this.dateColumnName = this.ref(column);
     return this;
   }
 
   /** Override the table used to qualify subsequent columns (e.g. a joined table). */
   table(name: string): this {
-    // Stored raw-but-validated; it is driver-escaped each time qualify() runs.
+    // Stored raw-but-validated; captured per-column each time ref() runs.
     assertSafeIdentifier(name);
     this.tableName = name;
     return this;
@@ -179,7 +177,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
 
   /** Group the series by a categorical column instead of by a date period. */
   labelColumn(column: string): this {
-    this.labelColumnName = this.qualify(column);
+    this.labelColumnRef = this.ref(column);
     return this;
   }
 
@@ -432,14 +430,9 @@ export class MetricsBuilder<T extends ObjectLiteral> {
 
   /** Generate a single aggregate value. Returns 0 when there is no data. */
   async metrics(): Promise<number> {
-    const params: Record<string, unknown> = {};
-    const where = this.buildFilters(params);
-    this.applyTz(params);
-
-    const plan: QueryPlan = {
-      select: [{ expr: this.dialect.aggregate(this.aggregateFn, this.column), alias: 'data' }],
-      where,
-      params,
+    const plan: SemanticPlan = {
+      select: [{ expr: { kind: 'aggregate', fn: this.aggregateFn, column: this.columnRef }, alias: 'data' }],
+      filters: this.buildSemanticFilters(),
       tz: this.tzActive() ? this.timezone : undefined,
     };
 
@@ -501,7 +494,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
       series = formatter.format(gapFillRaw(rows, this.missingValue), this.period, ctx);
     } else {
       // Category (labelColumn) and range labels are already final strings.
-      const labelPeriod = this.labelColumnName || this.range ? null : this.period;
+      const labelPeriod = this.labelColumnRef || this.range ? null : this.period;
       series = formatter.format(rows, labelPeriod, ctx);
       if (this.fill) {
         series = populate(await this.canonicalLabels(), series, this.missingValue);
@@ -513,7 +506,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
 
   /** True when grouping by a date period (not a categorical column or range). */
   private isPeriodMode(): boolean {
-    return this.period !== null && !this.labelColumnName && !this.range;
+    return this.period !== null && !this.labelColumnRef && !this.range;
   }
 
   /** Canonical ordered labels for fillMissingData in range / categorical mode. */
@@ -525,12 +518,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     if (this.missingLabels.length > 0) {
       return this.missingLabels;
     }
-    const plan: QueryPlan = {
-      select: [{ expr: this.labelColumnName as string, alias: 'label' }],
-      where: [],
+    const plan: SemanticPlan = {
+      select: [{ expr: { kind: 'column', column: this.labelColumnRef as ColumnRef }, alias: 'label' }],
+      filters: [],
       distinct: true,
-      orderBy: { expr: 'label', dir: 'ASC' },
-      params: {},
+      orderByLabel: 'ASC',
     };
     const rows = await this.backend.run(plan);
     return rows.map((row) => normalizeLabel(row.label));
@@ -544,7 +536,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
 
     const labelFormatter = new LabelFormatter(this.locale);
     const ctx = { year: this.year, month: this.month };
-    const labelPeriod = this.labelColumnName || this.range ? null : this.period;
+    const labelPeriod = this.labelColumnRef || this.range ? null : this.period;
     const labels = canonical.map((label) => labelFormatter.format(label, labelPeriod, ctx));
 
     const seriesFor = (field: string): number[] => {
@@ -569,7 +561,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     if (!this.fill) {
       return rows.map((row) => normalizeLabel(row.label));
     }
-    if (this.range || this.labelColumnName) {
+    if (this.range || this.labelColumnRef) {
       return this.canonicalLabels();
     }
     // Date period: integer buckets from the smallest to the largest present.
@@ -577,21 +569,17 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   }
 
   private async trendsData(): Promise<RawTrendRow[]> {
-    const params: Record<string, unknown> = {};
-    const select: SelectItem[] = [
-      { expr: this.dialect.aggregate(this.aggregateFn, this.column), alias: 'data' },
-      { expr: this.labelExpr(), alias: 'label' },
+    const select = [
+      { expr: { kind: 'aggregate', fn: this.aggregateFn, column: this.columnRef } as SelectExpr, alias: 'data' },
+      { expr: this.semanticLabelExpr(), alias: 'label' },
     ];
-    this.appendGroupedData(select, params);
-    const where = this.buildFilters(params);
-    this.applyTz(params);
+    this.appendGroupedData(select);
 
-    const plan: QueryPlan = {
+    const plan: SemanticPlan = {
       select,
-      where,
-      groupBy: 'label',
-      orderBy: { expr: 'label', dir: 'ASC' },
-      params,
+      filters: this.buildSemanticFilters(),
+      groupByLabel: true,
+      orderByLabel: 'ASC',
       tz: this.tzActive() ? this.timezone : undefined,
     };
 
@@ -602,42 +590,29 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   /**
    * Add one CASE-based aggregate per group label, so each trend row carries a
    * `data{i}` column with the per-group value. Group values are bound as
-   * parameters (never interpolated).
+   * parameters by the renderer (never interpolated).
    */
-  private appendGroupedData(select: SelectItem[], params: Record<string, unknown>): void {
+  private appendGroupedData(select: { expr: SelectExpr; alias: string }[]): void {
     this.groupedLabels.forEach((value, i) => {
-      const key = `nm_g${i}`;
-      params[key] = value;
       select.push({
-        expr: `${this.groupedAggregate}(CASE WHEN ${this.column} = :${key} THEN 1 ELSE 0 END)`,
+        expr: { kind: 'groupedAggregate', fn: this.groupedAggregate, column: this.columnRef, value, index: i },
         alias: `data${i}`,
       });
     });
   }
 
-  /** The SQL expression used as the grouped trend label. */
-  private labelExpr(): string {
-    if (this.labelColumnName) {
-      return this.labelColumnName;
+  /** The expression used as the grouped trend label. */
+  private semanticLabelExpr(): SelectExpr {
+    if (this.labelColumnRef) {
+      return { kind: 'column', column: this.labelColumnRef };
     }
     if (this.range) {
-      return this.dialect.dateBucket(this.groupBy, this.dateExpr());
+      return { kind: 'bucket', part: this.groupBy, date: this.dateColumnName };
     }
     if (this.period) {
-      return this.dialect.periodExpr(PERIOD_TO_DATE_PART[this.period], this.dateExpr());
+      return { kind: 'period', part: PERIOD_TO_DATE_PART[this.period], date: this.dateColumnName };
     }
-    return this.dateExpr();
-  }
-
-  /**
-   * The date-column SQL expression, timezone-converted when a non-UTC timezone
-   * is configured so that date parts are extracted in local time.
-   */
-  private dateExpr(): string {
-    if (this.timezone === DEFAULT_TIMEZONE) {
-      return this.dateColumnRef;
-    }
-    return this.dialect.convertTz(this.dateColumnRef, ':nm_tz');
+    return { kind: 'date', date: this.dateColumnName };
   }
 
   /** Whether a non-UTC timezone is configured. */
@@ -645,94 +620,63 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return this.timezone !== DEFAULT_TIMEZONE;
   }
 
-  /** Bind the timezone parameter when a non-UTC timezone is configured. */
-  private applyTz(params: Record<string, unknown>): void {
-    if (this.tzActive()) {
-      params.nm_tz = this.timezone;
-    }
-  }
-
   /**
-   * Build the WHERE fragments that scope the query to the configured
-   * period/range, collecting their bound values into `params`.
+   * Build the filters that scope the query to the configured period/range,
+   * plus any structured executor-mode where conditions.
    */
-  private buildFilters(params: Record<string, unknown>): string[] {
-    const where: string[] = [];
+  private buildSemanticFilters(): Filter[] {
+    const filters: Filter[] = [];
     if (this.range) {
-      params.nm_start = this.range.start;
-      params.nm_end = this.range.end;
-      where.push(
-        `${this.dialect.dateBucket('day', this.dateExpr())} BETWEEN :nm_start AND :nm_end`,
-      );
+      filters.push({
+        kind: 'dateBetween',
+        start: this.range.start,
+        end: this.range.end,
+        date: this.dateColumnName,
+      });
     } else {
       switch (this.period) {
         case Period.DAY:
-          this.eqFilter(where, params, 'year', this.year);
-          this.eqFilter(where, params, 'month', this.month);
-          this.windowFilter(where, params, 'day', this.day, () => this.resolver().dayPeriod());
+          this.eqFilter(filters, 'year', this.year);
+          this.eqFilter(filters, 'month', this.month);
+          this.windowFilter(filters, 'day', this.day, () => this.resolver().dayPeriod());
           break;
         case Period.WEEK:
-          this.eqFilter(where, params, 'year', this.year);
-          this.eqFilter(where, params, 'month', this.month);
-          this.windowFilter(where, params, 'week', this.week, () => this.resolver().weekPeriod());
+          this.eqFilter(filters, 'year', this.year);
+          this.eqFilter(filters, 'month', this.month);
+          this.windowFilter(filters, 'week', this.week, () => this.resolver().weekPeriod());
           break;
         case Period.MONTH:
-          this.eqFilter(where, params, 'year', this.year);
-          this.windowFilter(where, params, 'month', this.month, () =>
-            this.resolver().monthPeriod(),
-          );
+          this.eqFilter(filters, 'year', this.year);
+          this.windowFilter(filters, 'month', this.month, () => this.resolver().monthPeriod());
           break;
         case Period.YEAR:
-          this.windowFilter(where, params, 'year', this.year, () => [
+          this.windowFilter(filters, 'year', this.year, () => [
             this.year - this.windowCount,
             this.year,
           ]);
           break;
       }
     }
-    if (this.extraFilters) {
-      where.push(...this.extraFilters.fragments);
-      Object.assign(params, this.extraFilters.params);
-    }
-    return where;
+    filters.push(...this.extraWhere.map((w) => ({ kind: 'where' as const, ...w })));
+    return filters;
   }
 
   private windowFilter(
-    where: string[],
-    params: Record<string, unknown>,
+    filters: Filter[],
     part: DatePart,
     single: number,
     window: () => [number, number],
   ): void {
     if (this.windowCount === 1) {
-      this.eqFilter(where, params, part, single);
+      this.eqFilter(filters, part, single);
     } else if (this.windowCount > 1) {
-      this.betweenFilter(where, params, part, window());
+      const [start, end] = window();
+      filters.push({ kind: 'periodBetween', part, start, end, date: this.dateColumnName });
     }
   }
 
-  private eqFilter(
-    where: string[],
-    params: Record<string, unknown>,
-    part: DatePart,
-    value: number,
-  ): void {
-    const key = `nm_${part}`;
-    params[key] = value;
-    where.push(`${this.dialect.periodExpr(part, this.dateExpr())} = :${key}`);
-  }
-
-  private betweenFilter(
-    where: string[],
-    params: Record<string, unknown>,
-    part: DatePart,
-    [start, end]: [number, number],
-  ): void {
-    const lo = `nm_${part}_lo`;
-    const hi = `nm_${part}_hi`;
-    params[lo] = start;
-    params[hi] = end;
-    where.push(`${this.dialect.periodExpr(part, this.dateExpr())} BETWEEN :${lo} AND :${hi}`);
+  private eqFilter(filters: Filter[], part: DatePart, value: number): void {
+    filters.push({ kind: 'periodEq', part, value, date: this.dateColumnName });
   }
 
   private resolver(): PeriodResolver {

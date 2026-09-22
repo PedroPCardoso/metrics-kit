@@ -5,6 +5,8 @@ import { SqliteTimezoneUnsupportedException } from '../exceptions/sqlite-timezon
 import { normalizeData, normalizeLabel } from '../formatting/normalize';
 import { QueryBackend } from './query-backend.interface';
 import { QueryPlan } from './query-plan';
+import { renderPlan } from './render-plan';
+import { SemanticPlan } from './semantic-plan';
 
 // A `:name` placeholder, but not the second `:` of a `::cast`.
 const NAMED_PARAM = /(?<!:):([a-zA-Z_][a-zA-Z0-9_]*)/g;
@@ -16,7 +18,7 @@ const NAMED_PARAM = /(?<!:):([a-zA-Z_][a-zA-Z0-9_]*)/g;
  * the assembled SQL is injection-safe.
  */
 export class ExecutorBackend implements QueryBackend {
-  readonly dialect: SqlDialect;
+  private readonly dialect: SqlDialect;
 
   constructor(
     private readonly dataSource: DataSource,
@@ -30,11 +32,12 @@ export class ExecutorBackend implements QueryBackend {
     return this.dialect.escapeId(name);
   }
 
-  async run(plan: QueryPlan): Promise<Row[]> {
+  async run(plan: SemanticPlan): Promise<Row[]> {
     if (plan.tz && this.dataSource.dialect === 'sqlite') {
       throw new SqliteTimezoneUnsupportedException(plan.tz);
     }
-    const { sql, params } = this.assemble(plan);
+    const rendered = renderPlan(plan, this.dialect, (name) => this.dialect.escapeId(name));
+    const { sql, params } = this.assemble(rendered);
     const rows = await this.dataSource.execute(sql, params);
     return rows.map((row) => this.normalizeRow(row));
   }
