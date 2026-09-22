@@ -7,11 +7,14 @@ import { MetricsError } from '../exceptions/metrics.error';
 import { QueryExecutionError } from '../exceptions/query-execution.exception';
 import { QueryBackend } from './query-backend.interface';
 import { QueryPlan } from './query-plan';
+import { renderPlan } from './render-plan';
+import { SemanticPlan } from './semantic-plan';
 
 /**
- * Renders a QueryPlan onto a cloned TypeORM SelectQueryBuilder, preserving the
- * driver's own identifier escaping and parameter binding. This is the original,
- * proven execution path — unchanged in behavior, now behind the backend seam.
+ * Renders a SemanticPlan onto a cloned TypeORM SelectQueryBuilder, preserving
+ * the driver's own identifier escaping and parameter binding. This is the
+ * original, proven execution path — unchanged in behavior, now behind the
+ * backend seam.
  */
 export class TypeOrmBackend<T extends ObjectLiteral> implements QueryBackend {
   readonly dialect: SqlDialect;
@@ -24,9 +27,10 @@ export class TypeOrmBackend<T extends ObjectLiteral> implements QueryBackend {
     return this.qb.connection.driver.escape(name);
   }
 
-  async run(plan: QueryPlan): Promise<Row[]> {
-    const q = this.buildQuery(plan);
-    if (plan.tz) {
+  async run(plan: SemanticPlan): Promise<Row[]> {
+    const rendered = this.render(plan);
+    const q = this.buildQuery(rendered);
+    if (rendered.tz) {
       this.registerTz();
     }
     try {
@@ -37,21 +41,25 @@ export class TypeOrmBackend<T extends ObjectLiteral> implements QueryBackend {
       }
       throw new QueryExecutionError(err, {
         query: q.getSql(),
-        params: plan.params,
+        params: rendered.params,
         dialect: this.qb.connection.options.type,
         operation: 'execute',
       });
     }
   }
 
-  toSql(plan: QueryPlan, mask = false): string {
-    const q = this.buildQuery(plan);
+  toSql(plan: SemanticPlan, mask = false): string {
+    const q = this.buildQuery(this.render(plan));
     const sql = q.getSql();
     if (mask) {
       const params = q.getParameters() as Record<string, unknown>;
       return this.redactParams(sql, params);
     }
     return sql;
+  }
+
+  private render(plan: SemanticPlan): QueryPlan {
+    return renderPlan(plan, this.dialect, (name) => this.escapeId(name));
   }
 
   private buildQuery(plan: QueryPlan): SelectQueryBuilder<T> {

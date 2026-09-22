@@ -12,6 +12,8 @@ All library exceptions extend `MetricsError` and expose a stable `code`.
 | `INVALID_PERIOD` | `InvalidPeriodException` | `metricsWithVariations` received an unsupported period. | Use day, week, month, or year periods. |
 | `INVALID_TIMEZONE` | `InvalidTimezoneException` | The timezone was not `UTC` or a valid IANA zone. | Use values such as `UTC` or `America/Sao_Paulo`. |
 | `INVALID_VARIATIONS_COUNT` | `InvalidVariationsCountException` | Variation comparison count was not positive. | Pass a `previousCount` greater than zero. |
+| `INVALID_ROW_DATE` | `InvalidRowDateException` | A `fromRows()` row carried a date value that couldn't be parsed. | Ensure the row's date column holds a `Date`, an ISO string, or an epoch millisecond number. |
+| `UNSUPPORTED_IN_ROWS_MODE` | `UnsupportedInRowsModeException` | A SQL-only builder method (e.g. `.table()`, `.toSql()`) was called on a `fromRows()` builder. | Remove the call, or use `query()`/`queryExecutor()` instead of `fromRows()`. |
 | `SQLITE_TIMEZONE_UNSUPPORTED` | `SqliteTimezoneUnsupportedException` | Executor-mode SQLite was asked for non-UTC timezone bucketing. | Use UTC in SQLite executor mode or use Postgres/MySQL for timezone-aware trends. |
 | `CONFIGURATION_ERROR` | `ConfigurationError` | Adapter or dialect configuration could not be resolved. | Pass the dialect explicitly or use a supported driver/table object. |
 | `MISSING_BOUND_PARAMETER` | `MetricsError` | Generated SQL referenced a named parameter that was not provided. | Report this as a library bug with the query chain that produced it. |

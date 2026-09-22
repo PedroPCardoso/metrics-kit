@@ -178,7 +178,10 @@ const repo = withMetrics(orderRepo);
 await repo.metrics().countByMonth().trends();
 ```
 
-The full fluent API is documented in [`nestjs-metrics-core`](../core).
+The full fluent API is documented in [`nestjs-metrics-core`](../core) — including
+structured query scoping (`where` / `whereIn`) and the `fromRows()` entry point
+for in-memory row analysis. Both features work transparently through this package
+(the builder is re-exported unchanged).
 
 ## Why nestjs-metrics?
 

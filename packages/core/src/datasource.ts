@@ -1,4 +1,4 @@
-import type { ExecutorSpec as ZodExecutorSpec } from './options.schema';
+import type { ExecutorSpec as ZodExecutorSpec, RowsSpec as ZodRowsSpec } from './options.schema';
 
 /** One raw result row, keyed by select alias. */
 export type Row = Record<string, unknown>;
@@ -26,3 +26,6 @@ export interface DataSource {
  * for joins/subqueries the structured shape can't express.
  */
 export type ExecutorSpec = ZodExecutorSpec;
+
+/** Spec for the in-memory rows entry point (MetricsBuilder.fromRows). */
+export type RowsSpec = ZodRowsSpec;

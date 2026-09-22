@@ -1,5 +1,14 @@
 import { createHash } from 'crypto';
 import type { QueryPlan } from '../backend/query-plan';
+import type { SemanticPlan } from '../backend/semantic-plan';
+
+/**
+ * Either plan shape can be hashed. The builder keys on the SemanticPlan it
+ * emits (dialect-independent, but `source` carries the dialect-escaped FROM /
+ * base query, so two dialects over the same table never collide); the SQL
+ * QueryPlan stays supported for callers holding a rendered plan.
+ */
+export type CacheablePlan = QueryPlan | SemanticPlan;
 
 function stableStringify(value: unknown): string {
   if (value === null) return 'null';
@@ -18,17 +27,8 @@ function stableStringify(value: unknown): string {
  * Generate a deterministic cache key from a query plan. The key is a hex
  * digest of the plan shape so identical plans hit the same cache entry.
  */
-export function planCacheKey(plan: QueryPlan, keyPrefix?: string): string {
-  const payload = stableStringify({
-    source: plan.source,
-    select: plan.select,
-    where: plan.where,
-    groupBy: plan.groupBy,
-    orderBy: plan.orderBy,
-    distinct: plan.distinct,
-    params: plan.params,
-    tz: plan.tz,
-  });
+export function planCacheKey(plan: CacheablePlan, keyPrefix?: string): string {
+  const payload = stableStringify(plan);
   const namespace = keyPrefix ? `${keyPrefix}:mk:v1` : 'mk:v1';
   return `${namespace}:${createHash('md5').update(payload).digest('hex')}`;
 }

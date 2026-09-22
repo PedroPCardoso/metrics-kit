@@ -189,6 +189,10 @@ without hand-writing date-bucketing SQL for every chart.
 
 The standalone engine (incl. `Metrics`/`metricsFor`) is also re-exported here, and
 documented in [`nestjs-metrics-core`](https://github.com/PedroPCardoso/metrics-kit/tree/master/packages/core).
+Every adapter subpath supports structured query scoping (`where` / `whereIn`) and
+the `fromRows()` entry point for in-memory row analysis — the full fluent API is
+available unchanged through all entry points (`prismaMetrics`, `drizzleMetrics`,
+`kyselyMetrics`, and `Metrics`).
 
 ## License
 

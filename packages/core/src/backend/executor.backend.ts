@@ -7,15 +7,17 @@ import { SqliteTimezoneUnsupportedException } from '../exceptions/sqlite-timezon
 import { normalizeData, normalizeLabel } from '../formatting/normalize';
 import { QueryBackend } from './query-backend.interface';
 import { QueryPlan } from './query-plan';
+import { renderPlan } from './render-plan';
+import { SemanticPlan } from './semantic-plan';
 
 // A `:name` placeholder, but not the second `:` of a `::cast`.
 const NAMED_PARAM = /(?<!:):([a-zA-Z_][a-zA-Z0-9_]*)/g;
 
 /**
- * Renders a QueryPlan into a single parameterized SQL string and runs it through
- * the DataSource executor. Identifiers were already validated upstream
- * (assertSafeIdentifier); values flow only as positional bound parameters, so
- * the assembled SQL is injection-safe.
+ * Renders a SemanticPlan into a single parameterized SQL string and runs it
+ * through the DataSource executor. Identifiers were already validated upstream
+ * (assertSafeIdentifier) and are escaped here; values flow only as positional
+ * bound parameters, so the assembled SQL is injection-safe.
  */
 export class ExecutorBackend implements QueryBackend {
   readonly dialect: SqlDialect;
@@ -32,11 +34,11 @@ export class ExecutorBackend implements QueryBackend {
     return this.dialect.escapeId(name);
   }
 
-  async run(plan: QueryPlan): Promise<Row[]> {
+  async run(plan: SemanticPlan): Promise<Row[]> {
     if (plan.tz && this.dataSource.dialect === 'sqlite') {
       throw new SqliteTimezoneUnsupportedException(plan.tz);
     }
-    const { sql, params } = this.assemble(plan);
+    const { sql, params } = this.assemble(this.render(plan));
     let rows: Row[];
     try {
       rows = await this.dataSource.execute(sql, params);
@@ -55,12 +57,16 @@ export class ExecutorBackend implements QueryBackend {
     return rows.map((row) => this.normalizeRow(row));
   }
 
-  toSql(plan: QueryPlan, mask = false): string {
-    const { sql, params } = this.assemble(plan);
+  toSql(plan: SemanticPlan, mask = false): string {
+    const { sql, params } = this.assemble(this.render(plan));
     if (mask) {
       return this.redact(sql, params);
     }
     return this.interpolate(sql, params);
+  }
+
+  private render(plan: SemanticPlan): QueryPlan {
+    return renderPlan(plan, this.dialect, (name) => this.escapeId(name));
   }
 
   private assemble(plan: QueryPlan): { sql: string; params: unknown[] } {

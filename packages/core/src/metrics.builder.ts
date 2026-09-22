@@ -4,16 +4,25 @@ import { Aggregate } from './enums/aggregate.enum';
 import { Period } from './enums/period.enum';
 import { InvalidPeriodException } from './exceptions/invalid-period.exception';
 import { InvalidVariationsCountException } from './exceptions/invalid-variations-count.exception';
+import { ConfigurationError } from './exceptions/configuration.exception';
+import { UnsupportedInRowsModeException } from './exceptions/unsupported-in-rows-mode.exception';
 import { assertAggregate, assertDateFormat, assertSafeIdentifier, assertTimezone } from './validation';
-import { validateExecutorSpec, validateMetricsOptions } from './options.schema';
+import { validateExecutorSpec, validateMetricsOptions, validateRowsSpec } from './options.schema';
 import { dialectFor } from './dialects/dialect.factory';
-import { DatePart, SqlDialect } from './dialects/sql-dialect.interface';
+import { DatePart } from './dialects/sql-dialect.interface';
 import { QueryBackend } from './backend/query-backend.interface';
-import { QueryPlan, SelectItem } from './backend/query-plan';
+import {
+  ColumnRef,
+  Filter,
+  SelectExpr,
+  SemanticPlan,
+  SemanticSelectItem,
+} from './backend/semantic-plan';
 import { TypeOrmBackend } from './backend/typeorm.backend';
 import { ExecutorBackend } from './backend/executor.backend';
-import { DataSource, ExecutorSpec } from './datasource';
-import { compileWhere, CompiledWhere, WhereInput } from './where';
+import { RowsBackend } from './backend/rows.backend';
+import { DataSource, ExecutorSpec, RowsSpec } from './datasource';
+import { WhereCondition, WhereInput, WhereScalar } from './where';
 import { normalizeData, normalizeLabel } from './formatting/normalize';
 import { PeriodResolver } from './dates/period-resolver';
 import { enumerateBuckets } from './dates/bucket-series';
@@ -73,12 +82,11 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   static skipValidation = false;
 
   private tableName: string;
-  private readonly dialect: SqlDialect;
   private readonly locale: string;
   private readonly timezone: string;
   private aggregateFn: Aggregate = Aggregate.COUNT;
-  private column: string;
-  private dateColumnRef: string;
+  private columnRef: ColumnRef;
+  private dateColumnName: ColumnRef;
   private period: Period | null = null;
   /** Window size for the period (0 = whole period). Named to avoid colliding with the count() aggregate method. */
   private windowCount = 0;
@@ -87,9 +95,9 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   /** Granularity used to bucket a date range. */
   private groupBy: DatePart = 'day';
   /** Categorical column to group by instead of a date period. */
-  private labelColumnName: string | null = null;
-  /** Structured executor-mode filters (ANDed onto every query). */
-  private extraFilters: CompiledWhere | null = null;
+  private labelColumnRef: ColumnRef | null = null;
+  /** Structured scoping filters (ANDed onto every query), in call order. */
+  private extraWhere: { column: ColumnRef; condition: WhereCondition }[] = [];
   private fill = false;
   private missingValue = 0;
   private missingLabels: (string | number)[] = [];
@@ -98,6 +106,8 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   private groupedAggregate: Aggregate = Aggregate.SUM;
   private caching: CacheOptions | null = null;
   private cacheStore: CacheStore | undefined;
+  /** Set by fromRows(); gates SQL-only settings like table(). */
+  private rowsMode = false;
   private now = new Date();
   private year: number = this.now.getFullYear();
   private month: number = this.now.getMonth() + 1;
@@ -120,7 +130,6 @@ export class MetricsBuilder<T extends ObjectLiteral> {
       validateMetricsOptions(options);
     }
     this.tableName = tableName;
-    this.dialect = backend.dialect;
     this.locale = options.locale ?? DEFAULT_LOCALE;
     this.timezone = options.timezone ?? DEFAULT_TIMEZONE;
     assertTimezone(this.timezone);
@@ -128,23 +137,22 @@ export class MetricsBuilder<T extends ObjectLiteral> {
       this.caching = options.cache;
       this.cacheStore = cacheStore ?? defaultCacheStore;
     }
-    this.column = this.qualify('id');
-    this.dateColumnRef = this.qualify('created_at');
+    this.columnRef = this.ref('id');
+    this.dateColumnName = this.ref('created_at');
   }
 
   /**
-   * Single choke point that turns a bare column name into a table-qualified,
-   * driver-escaped identifier. Every consumer-supplied identifier passes through
-   * here: it is validated against the allowlist and then escaped, so it can
-   * never inject SQL (named parameters do not protect identifiers).
+   * Single choke point that turns a bare column name into a validated,
+   * table-captured reference. Every consumer-supplied identifier passes
+   * through here: it is validated against the allowlist so it can never
+   * inject SQL (named parameters do not protect identifiers); the backend
+   * escapes it at render time. The table is captured when the column is
+   * configured, so a later .table() call does not retroactively re-qualify
+   * earlier columns.
    */
-  private qualify(column: string): string {
+  private ref(column: string): ColumnRef {
     assertSafeIdentifier(column);
-    return `${this.escapeId(this.tableName)}.${this.escapeId(column)}`;
-  }
-
-  private escapeId(name: string): string {
-    return this.backend.escapeId(name);
+    return { table: this.tableName, column };
   }
 
   /**
@@ -159,12 +167,13 @@ export class MetricsBuilder<T extends ObjectLiteral> {
       timezone: this.timezone,
     }, this.cacheStore, this.sourceIdentity);
     clone.aggregateFn = this.aggregateFn;
-    clone.column = this.column;
-    clone.dateColumnRef = this.dateColumnRef;
+    clone.columnRef = this.columnRef;
+    clone.dateColumnName = this.dateColumnName;
     clone.tableName = this.tableName;
-    clone.extraFilters = this.extraFilters;
+    clone.extraWhere = [...this.extraWhere];
     clone.caching = this.caching;
     clone.cacheStore = this.cacheStore;
+    clone.rowsMode = this.rowsMode;
     return clone;
   }
 
@@ -240,9 +249,50 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return builder;
   }
 
-  /** Compile and store structured executor-mode filters (set by queryExecutor). */
+  /** Store structured executor-mode filters (set by queryExecutor). */
   private applyExecutorWhere(where: WhereInput): void {
-    this.extraFilters = compileWhere(where, (column) => this.qualify(column));
+    for (const [column, condition] of Object.entries(where)) {
+      this.where(column, condition);
+    }
+  }
+
+  /**
+   * Entry point over pre-fetched rows: the caller owns 100% of the SQL (e.g. a
+   * scoped/visibility-gated query); the builder does the bucketing, gap fill,
+   * timezone handling and labels. Full API parity with the SQL modes.
+   *
+   * Caching is not supported here — in-memory rows have no stable query
+   * identity to key on — so `options.cache.enabled` is rejected rather than
+   * silently ignored.
+   *
+   * @param rows - The pre-fetched rows to aggregate over.
+   * @param spec - Which row property carries the bucketing date; see {@link RowsSpec}.
+   * @param options - Locale and timezone options for the series.
+   * @returns A builder ready for chaining.
+   * @throws {@link ConfigurationError} when `options.cache.enabled` is set.
+   */
+  static fromRows(
+    rows: Record<string, unknown>[],
+    spec: RowsSpec = {},
+    options?: MetricsOptions,
+  ): MetricsBuilder<ObjectLiteral> {
+    if (!MetricsBuilder.skipValidation) {
+      spec = validateRowsSpec(spec);
+      validateMetricsOptions(options ?? {});
+    }
+    if (options?.cache?.enabled) {
+      throw new ConfigurationError(
+        'nestjs-metrics: caching is not supported with fromRows() — in-memory rows have no stable query identity to key a cache entry on.',
+        'Remove options.cache (or set cache.enabled to false), or use query()/queryExecutor() if you need caching.',
+        { operation: 'fromRows' },
+      );
+    }
+    const builder = new MetricsBuilder<ObjectLiteral>(new RowsBackend(rows), 'rows', options);
+    builder.rowsMode = true;
+    if (spec.dateColumn) {
+      builder.dateColumn(spec.dateColumn);
+    }
+    return builder;
   }
 
   // --- Aggregates ---------------------------------------------------------
@@ -250,7 +300,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   private aggregate(fn: Aggregate, column: string): this {
     assertAggregate(fn);
     this.aggregateFn = fn;
-    this.column = this.qualify(column);
+    this.columnRef = this.ref(column);
     return this;
   }
 
@@ -283,7 +333,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
    * @throws {@link InvalidIdentifierException} when `column` is not a plain SQL identifier.
    */
   dateColumn(column: string): this {
-    this.dateColumnRef = this.qualify(column);
+    this.dateColumnName = this.ref(column);
     return this;
   }
 
@@ -292,9 +342,13 @@ export class MetricsBuilder<T extends ObjectLiteral> {
    * @param name - Table name to qualify with from here on.
    * @returns This builder, for chaining.
    * @throws {@link InvalidIdentifierException} when `name` is not a plain SQL identifier.
+   * @throws {@link UnsupportedInRowsModeException} when the builder came from {@link fromRows}.
    */
   table(name: string): this {
-    // Stored raw-but-validated; it is driver-escaped each time qualify() runs.
+    if (this.rowsMode) {
+      throw new UnsupportedInRowsModeException('table');
+    }
+    // Stored raw-but-validated; captured per-column each time ref() runs.
     assertSafeIdentifier(name);
     this.tableName = name;
     return this;
@@ -319,8 +373,47 @@ export class MetricsBuilder<T extends ObjectLiteral> {
    * ```
    */
   labelColumn(column: string): this {
-    this.labelColumnName = this.qualify(column);
+    this.labelColumnRef = this.ref(column);
     return this;
+  }
+
+  /**
+   * AND a structured condition onto every query this builder runs: scalar =
+   * equality, array = IN (an empty array matches nothing — fail closed),
+   * object = range (`gte`/`lte`/`gt`/`lt`), `null` = IS NULL. Values always
+   * bind as parameters; the column name is validated
+   * (`assertSafeIdentifier`) and driver-escaped. Chain multiple calls to AND
+   * conditions. This is the hook for scoping / visibility gates, and it also
+   * scopes the label auto-discovery queries behind {@link fillMissingData}
+   * and {@link groupData}.
+   *
+   * @param column - Column to filter on.
+   * @param condition - Equality, membership, range, or `null`.
+   * @returns This builder, for chaining.
+   * @throws {@link InvalidIdentifierException} when `column` is not a plain SQL identifier.
+   *
+   * @example
+   * ```ts
+   * const mine = await Metrics.query(orderRepo.createQueryBuilder('order'))
+   *   .countByMonth()
+   *   .where('tenant_id', tenantId)
+   *   .trends();
+   * ```
+   */
+  where(column: string, condition: WhereCondition): this {
+    this.extraWhere.push({ column: this.ref(column), condition });
+    return this;
+  }
+
+  /**
+   * Sugar for `where(column, values)`: membership with bound parameters.
+   * @param column - Column to filter on.
+   * @param values - Allowed values; an empty array matches nothing.
+   * @returns This builder, for chaining.
+   * @throws {@link InvalidIdentifierException} when `column` is not a plain SQL identifier.
+   */
+  whereIn(column: string, values: WhereScalar[]): this {
+    return this.where(column, values);
   }
 
   /**
@@ -844,6 +937,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
    *
    * @param options - When `mask` is true parameter values are redacted.
    * @returns The rendered SQL with bound parameter values.
+   * @throws {@link UnsupportedInRowsModeException} in {@link fromRows} mode, where there is no SQL.
    */
   toSql(options?: { mask?: boolean }): string {
     return this.backend.toSql(this.metricsPlan(), options?.mask);
@@ -856,26 +950,34 @@ export class MetricsBuilder<T extends ObjectLiteral> {
    *
    * @param options - When `mask` is true parameter values are redacted.
    * @returns The rendered SQL with bound parameter values.
+   * @throws {@link UnsupportedInRowsModeException} in {@link fromRows} mode, where there is no SQL.
    */
   toTrendsSql(options?: { mask?: boolean }): string {
     return this.backend.toSql(this.trendsPlan(), options?.mask);
   }
 
-  /** Remove the cached entry for the current single-metric query shape. */
+  /**
+   * Remove the cached entry for the current single-metric query shape. A
+   * harmless no-op when caching is off, including in {@link fromRows} mode,
+   * where caching is never available.
+   */
   async invalidateMetrics(): Promise<void> {
-    this.invalidateCache(this.metricsPlan());
+    if (this.rowsMode) {
+      return;
+    }
+    await this.invalidateCache(this.metricsPlan());
   }
 
-  private metricsPlan(): QueryPlan {
-    const params: Record<string, unknown> = {};
-    const where = this.buildFilters(params);
-    this.applyTz(params);
-
+  private metricsPlan(): SemanticPlan {
     return {
       source: this.sourceIdentity,
-      select: [{ expr: this.dialect.aggregate(this.aggregateFn, this.column), alias: 'data' }],
-      where,
-      params,
+      select: [
+        {
+          expr: { kind: 'aggregate', fn: this.aggregateFn, column: this.columnRef },
+          alias: 'data',
+        },
+      ],
+      filters: this.buildSemanticFilters(),
       tz: this.tzActive() ? this.timezone : undefined,
     };
   }
@@ -954,7 +1056,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
       // Date periods: fill the integer buckets, then format the labels.
       series = formatter.format(gapFillRaw(rows, this.missingValue), this.period, ctx);
     } else {
-      const labelPeriod = this.labelColumnName || this.range ? null : this.period;
+      const labelPeriod = this.labelColumnRef || this.range ? null : this.period;
       series = formatter.format(rows, labelPeriod, ctx);
       if (this.fill) {
         series = populate(await this.canonicalLabels(), series, this.missingValue);
@@ -1012,7 +1114,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     clone.windowCount = this.windowCount;
     clone.range = this.range;
     clone.groupBy = this.groupBy;
-    clone.labelColumnName = this.labelColumnName;
+    clone.labelColumnRef = this.labelColumnRef;
     clone.fill = this.fill;
     clone.missingValue = this.missingValue;
     clone.missingLabels = [...this.missingLabels];
@@ -1027,14 +1129,21 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return clone;
   }
 
-  /** Remove the cached entry for the current trends query shape. */
+  /**
+   * Remove the cached entry for the current trends query shape. A harmless
+   * no-op when caching is off, including in {@link fromRows} mode, where
+   * caching is never available.
+   */
   async invalidateTrends(): Promise<void> {
-    this.invalidateCache(this.trendsPlan());
+    if (this.rowsMode) {
+      return;
+    }
+    await this.invalidateCache(this.trendsPlan());
   }
 
   /** True when grouping by a date period (not a categorical column or range). */
   private isPeriodMode(): boolean {
-    return this.period !== null && !this.labelColumnName && !this.range;
+    return this.period !== null && !this.labelColumnRef && !this.range;
   }
 
   /** Canonical ordered labels for fillMissingData in range / categorical mode. */
@@ -1046,13 +1155,18 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     if (this.missingLabels.length > 0) {
       return this.missingLabels;
     }
-    const plan: QueryPlan = {
+    // Only the where/whereIn scoping filters apply here (not the period
+    // filters): the canonical label set must respect .where()/.whereIn()
+    // visibility scoping, but should still span the full configured period
+    // range for gap-filling.
+    const plan: SemanticPlan = {
       source: this.sourceIdentity,
-      select: [{ expr: this.labelColumnName as string, alias: 'label' }],
-      where: [],
+      select: [
+        { expr: { kind: 'column', column: this.labelColumnRef as ColumnRef }, alias: 'label' },
+      ],
+      filters: this.scopeFilters(),
       distinct: true,
-      orderBy: { expr: 'label', dir: 'ASC' },
-      params: {},
+      orderByLabel: 'ASC',
     };
     const rows = await this.backend.run(plan);
     return rows.map((row) => normalizeLabel(row.label));
@@ -1062,20 +1176,23 @@ export class MetricsBuilder<T extends ObjectLiteral> {
    * Resolve group labels: return the explicit set when provided, or query
    * distinct values from the aggregate column when auto-discovery is enabled.
    * The result is stored back on the builder so subsequent calls are stable.
+   *
+   * The discovery query runs through the same `buildSemanticFilters()` as the
+   * trends query itself, so the series set is scoped by the configured
+   * period/range *and* by every `.where()`/`.whereIn()` filter — an
+   * out-of-scope column value can never surface as a series label.
    */
   private async resolveGroupLabels(): Promise<(string | number)[]> {
     if (this.groupedLabels && this.groupedLabels.length > 0) {
       return this.groupedLabels;
     }
-    const params: Record<string, unknown> = {};
-    const where = this.buildFilters(params);
-    const plan: QueryPlan = {
+    const plan: SemanticPlan = {
       source: this.sourceIdentity,
-      select: [{ expr: this.column, alias: 'label' }],
-      where,
+      select: [{ expr: { kind: 'column', column: this.columnRef }, alias: 'label' }],
+      filters: this.buildSemanticFilters(),
       distinct: true,
-      orderBy: { expr: 'label', dir: 'ASC' },
-      params,
+      orderByLabel: 'ASC',
+      tz: this.tzActive() ? this.timezone : undefined,
     };
     const rows = await this.backend.run(plan);
     this.groupedLabels = rows.map((row) => normalizeLabel(row.label));
@@ -1091,7 +1208,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
 
     const labelFormatter = new LabelFormatter(this.locale);
     const ctx = { year: this.year, month: this.month };
-    const labelPeriod = this.labelColumnName || this.range ? null : this.period;
+    const labelPeriod = this.labelColumnRef || this.range ? null : this.period;
     const formattedLabels = canonical.map((label) => labelFormatter.format(label, labelPeriod, ctx));
 
     const seriesFor = (field: string): number[] =>
@@ -1142,7 +1259,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     if (!this.fill) {
       return rows.map((row) => normalizeLabel(row.label));
     }
-    if (this.range || this.labelColumnName) {
+    if (this.range || this.labelColumnRef) {
       return this.canonicalLabels();
     }
     // Date period: integer buckets from the smallest to the largest present.
@@ -1155,23 +1272,22 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return rows.map(toTrendRow);
   }
 
-  private trendsPlan(): QueryPlan {
-    const params: Record<string, unknown> = {};
-    const select: SelectItem[] = [
-      { expr: this.dialect.aggregate(this.aggregateFn, this.column), alias: 'data' },
-      { expr: this.labelExpr(), alias: 'label' },
+  private trendsPlan(): SemanticPlan {
+    const select: SemanticSelectItem[] = [
+      {
+        expr: { kind: 'aggregate', fn: this.aggregateFn, column: this.columnRef },
+        alias: 'data',
+      },
+      { expr: this.semanticLabelExpr(), alias: 'label' },
     ];
-    this.appendGroupedData(select, params);
-    const where = this.buildFilters(params);
-    this.applyTz(params);
+    this.appendGroupedData(select);
 
     return {
       source: this.sourceIdentity,
       select,
-      where,
-      groupBy: 'label',
-      orderBy: { expr: 'label', dir: 'ASC' },
-      params,
+      filters: this.buildSemanticFilters(),
+      groupByLabel: true,
+      orderByLabel: 'ASC',
       tz: this.tzActive() ? this.timezone : undefined,
     };
   }
@@ -1179,43 +1295,36 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   /**
    * Add one CASE-based aggregate per group label, so each trend row carries a
    * `data{i}` column with the per-group value. Group values are bound as
-   * parameters (never interpolated).
+   * parameters by the renderer (never interpolated).
    */
-  private appendGroupedData(select: SelectItem[], params: Record<string, unknown>): void {
+  private appendGroupedData(select: SemanticSelectItem[]): void {
     const labels = this.groupedLabels ?? [];
     labels.forEach((value, i) => {
-      const key = `nm_g${i}`;
-      params[key] = value;
       select.push({
-        expr: `${this.groupedAggregate}(CASE WHEN ${this.column} = :${key} THEN 1 ELSE 0 END)`,
+        expr: {
+          kind: 'groupedAggregate',
+          fn: this.groupedAggregate,
+          column: this.columnRef,
+          value,
+          index: i,
+        },
         alias: `data${i}`,
       });
     });
   }
 
-  /** The SQL expression used as the grouped trend label. */
-  private labelExpr(): string {
-    if (this.labelColumnName) {
-      return this.labelColumnName;
+  /** The expression used as the grouped trend label. */
+  private semanticLabelExpr(): SelectExpr {
+    if (this.labelColumnRef) {
+      return { kind: 'column', column: this.labelColumnRef };
     }
     if (this.range) {
-      return this.dialect.dateBucket(this.groupBy, this.dateExpr());
+      return { kind: 'bucket', part: this.groupBy, date: this.dateColumnName };
     }
     if (this.period) {
-      return this.dialect.periodExpr(PERIOD_TO_DATE_PART[this.period], this.dateExpr());
+      return { kind: 'period', part: PERIOD_TO_DATE_PART[this.period], date: this.dateColumnName };
     }
-    return this.dateExpr();
-  }
-
-  /**
-   * The date-column SQL expression, timezone-converted when a non-UTC timezone
-   * is configured so that date parts are extracted in local time.
-   */
-  private dateExpr(): string {
-    if (this.timezone === DEFAULT_TIMEZONE) {
-      return this.dateColumnRef;
-    }
-    return this.dialect.convertTz(this.dateColumnRef, ':nm_tz');
+    return { kind: 'date', date: this.dateColumnName };
   }
 
   /** Whether a non-UTC timezone is configured. */
@@ -1223,100 +1332,74 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return this.timezone !== DEFAULT_TIMEZONE;
   }
 
-  /** Bind the timezone parameter when a non-UTC timezone is configured. */
-  private applyTz(params: Record<string, unknown>): void {
-    if (this.tzActive()) {
-      params.nm_tz = this.timezone;
-    }
+  /** The `.where()`/`.whereIn()` scoping filters on their own (no period). */
+  private scopeFilters(): Filter[] {
+    return this.extraWhere.map((w) => ({ kind: 'where' as const, ...w }));
   }
 
   /**
-   * Build the WHERE fragments that scope the query to the configured
-   * period/range, collecting their bound values into `params`.
+   * Build the filters that scope the query to the configured period/range,
+   * plus every structured where/whereIn condition.
    */
-  private buildFilters(params: Record<string, unknown>): string[] {
-    const where: string[] = [];
+  private buildSemanticFilters(): Filter[] {
+    const filters: Filter[] = [];
     if (this.range) {
-      params.nm_start = this.range.start;
-      params.nm_end = this.range.end;
-      where.push(
-        `${this.dialect.dateBucket('day', this.dateExpr())} BETWEEN :nm_start AND :nm_end`,
-      );
+      filters.push({
+        kind: 'dateBetween',
+        start: this.range.start,
+        end: this.range.end,
+        date: this.dateColumnName,
+      });
     } else {
       switch (this.period) {
         case Period.HOUR:
-          this.eqFilter(where, params, 'year', this.year);
-          this.eqFilter(where, params, 'month', this.month);
-          this.eqFilter(where, params, 'day', this.day);
-          this.windowFilter(where, params, 'hour', this.hour, () => this.resolver().hourPeriod());
+          this.eqFilter(filters, 'year', this.year);
+          this.eqFilter(filters, 'month', this.month);
+          this.eqFilter(filters, 'day', this.day);
+          this.windowFilter(filters, 'hour', this.hour, () => this.resolver().hourPeriod());
           break;
         case Period.DAY:
-          this.eqFilter(where, params, 'year', this.year);
-          this.eqFilter(where, params, 'month', this.month);
-          this.windowFilter(where, params, 'day', this.day, () => this.resolver().dayPeriod());
+          this.eqFilter(filters, 'year', this.year);
+          this.eqFilter(filters, 'month', this.month);
+          this.windowFilter(filters, 'day', this.day, () => this.resolver().dayPeriod());
           break;
         case Period.WEEK:
-          this.eqFilter(where, params, 'year', this.year);
-          this.eqFilter(where, params, 'month', this.month);
-          this.windowFilter(where, params, 'week', this.week, () => this.resolver().weekPeriod());
+          this.eqFilter(filters, 'year', this.year);
+          this.eqFilter(filters, 'month', this.month);
+          this.windowFilter(filters, 'week', this.week, () => this.resolver().weekPeriod());
           break;
         case Period.MONTH:
-          this.eqFilter(where, params, 'year', this.year);
-          this.windowFilter(where, params, 'month', this.month, () =>
-            this.resolver().monthPeriod(),
-          );
+          this.eqFilter(filters, 'year', this.year);
+          this.windowFilter(filters, 'month', this.month, () => this.resolver().monthPeriod());
           break;
         case Period.YEAR:
-          this.windowFilter(where, params, 'year', this.year, () => [
+          this.windowFilter(filters, 'year', this.year, () => [
             this.year - this.windowCount,
             this.year,
           ]);
           break;
       }
     }
-    if (this.extraFilters) {
-      where.push(...this.extraFilters.fragments);
-      Object.assign(params, this.extraFilters.params);
-    }
-    return where;
+    filters.push(...this.scopeFilters());
+    return filters;
   }
 
   private windowFilter(
-    where: string[],
-    params: Record<string, unknown>,
+    filters: Filter[],
     part: DatePart,
     single: number,
     window: () => [number, number],
   ): void {
     if (this.windowCount === 1) {
-      this.eqFilter(where, params, part, single);
+      this.eqFilter(filters, part, single);
     } else if (this.windowCount > 1) {
-      this.betweenFilter(where, params, part, window());
+      const [start, end] = window();
+      filters.push({ kind: 'periodBetween', part, start, end, date: this.dateColumnName });
     }
   }
 
-  private eqFilter(
-    where: string[],
-    params: Record<string, unknown>,
-    part: DatePart,
-    value: number,
-  ): void {
-    const key = `nm_${part}`;
-    params[key] = value;
-    where.push(`${this.dialect.periodExpr(part, this.dateExpr())} = :${key}`);
-  }
-
-  private betweenFilter(
-    where: string[],
-    params: Record<string, unknown>,
-    part: DatePart,
-    [start, end]: [number, number],
-  ): void {
-    const lo = `nm_${part}_lo`;
-    const hi = `nm_${part}_hi`;
-    params[lo] = start;
-    params[hi] = end;
-    where.push(`${this.dialect.periodExpr(part, this.dateExpr())} BETWEEN :${lo} AND :${hi}`);
+  private eqFilter(filters: Filter[], part: DatePart, value: number): void {
+    filters.push({ kind: 'periodEq', part, value, date: this.dateColumnName });
   }
 
   private resolver(): PeriodResolver {
@@ -1330,12 +1413,12 @@ export class MetricsBuilder<T extends ObjectLiteral> {
    * Execute the callback, returning a cached value when available for the
    * given query plan. A no-op when caching is not enabled on this builder.
    */
-  private async withCache<T>(plan: QueryPlan, execute: () => Promise<T>): Promise<T> {
+  private async withCache<R>(plan: SemanticPlan, execute: () => Promise<R>): Promise<R> {
     if (!this.caching || !this.cacheStore) {
       return execute();
     }
     const key = planCacheKey(plan, this.caching.keyPrefix);
-    const cached = await this.cacheStore.get<T>(key);
+    const cached = await this.cacheStore.get<R>(key);
     if (cached !== undefined) {
       this.logCache('hit', key);
       return cached;
@@ -1347,7 +1430,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     return result;
   }
 
-  private async invalidateCache(plan: QueryPlan): Promise<void> {
+  private async invalidateCache(plan: SemanticPlan): Promise<void> {
     if (!this.caching || !this.cacheStore) {
       return;
     }

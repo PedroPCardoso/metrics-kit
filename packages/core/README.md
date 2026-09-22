@@ -123,6 +123,51 @@ converts the date column before bucketing (DST-correct) on Postgres/MySQL; on
 SQLite, timezone conversion is supported via the TypeORM path but **not** the
 executor mode (which is UTC-only and throws on a non-UTC timezone).
 
+### Scoping with `where` / `whereIn`
+
+Every query the builder runs can be AND-scoped with structured, parameter-bound
+filters — the hook for multi-tenant / visibility gates:
+
+```ts
+// A gate wraps the builder and injects the caller's visible ids:
+const scoped = Metrics.queryExecutor(db, { table: 'donations', dateColumn: 'created_at' })
+  .whereIn('member_id', visibleIds)   // array → IN (…), every value bound
+  .where('status', 'confirmed')       // scalar → equality
+  .where('amount', { gte: 0 });       // object → range (gte/lte/gt/lt); null → IS NULL
+
+await scoped.sumByMonth('amount', 12).fillMissingData().trends();
+```
+
+Guarantees: values only ever travel as bound parameters; column names are
+validated and driver-escaped; an **empty `whereIn` list matches nothing**
+(fail closed). Also available in TypeORM mode and as
+`queryExecutor(ds, { …, where: { member_id: visibleIds } })`.
+
+### Bring your own SQL: `fromRows`
+
+When your query layer must own 100% of the SQL (Kysely, raw pg, an
+architecture rule that every read goes through a scoped query), hand the
+builder the rows and let it do the hard part — period bucketing, gap fill,
+timezone-correct month boundaries, labels, variations:
+
+```ts
+const rows = await scopedQuery.selectFrom('donations').selectAll().execute();
+
+await Metrics.fromRows(rows, { dateColumn: 'created_at' }, { timezone: 'America/Sao_Paulo' })
+  .sumByMonth('amount', 12)
+  .fillMissingData()
+  .trends(); // identical output to the SQL modes, verified by an equivalence suite
+```
+
+`dateColumn` accepts `Date`, ISO strings or epoch milliseconds. The full
+fluent API works (`count/sum/average/max/min`, periods, `between`,
+`labelColumn`, `groupData`, `metricsWithVariations`, `where`/`whereIn`).
+An unparseable date throws `InvalidRowDateException` naming the row index;
+`.table()` throws `UnsupportedInRowsModeException`. Caching is not available in
+rows mode — passing `cache: { enabled: true }` to `fromRows()` throws
+`ConfigurationError` rather than silently ignoring it, since in-memory rows have
+no stable query identity to key a cache entry on.
+
 ### Caching
 
 ```ts
@@ -141,7 +186,8 @@ Implement the `CacheStore` interface to plug in Redis or any backend.
 Typed exceptions: `InvalidAggregateException`, `InvalidPeriodException`,
 `InvalidDateFormatException`, `InvalidVariationsCountException`,
 `InvalidIdentifierException`, `InvalidTimezoneException`,
-`SqliteTimezoneUnsupportedException`. Identifiers are validated and escaped —
+`SqliteTimezoneUnsupportedException`, `InvalidRowDateException`,
+`UnsupportedInRowsModeException`. Identifiers are validated and escaped —
 keep them developer-controlled, not user input.
 
 See the [error codes reference](https://github.com/PedroPCardoso/metrics-kit/blob/master/docs/ERROR_CODES.md) for the full table.

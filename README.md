@@ -240,6 +240,11 @@ docker compose run --rm dev npm run docs:api   # writes docs/api/
 Full API reference is also available on the
 [NestJ ReadMe](https://nestjs-metrics.readme.io/docs/getting-started) site.
 
+**Key features:** Scoping with `where()`/`whereIn()` structured AND filters
+(bound parameters, empty IN fails closed) and a `fromRows()` entry point for
+in-memory analysis of raw SQL results — see [`nestjs-metrics-core`](packages/core)
+for complete examples and API reference.
+
 ## Development
 
 npm-workspaces monorepo. Everything runs in Docker:

@@ -8,6 +8,7 @@ export type {
   Row,
   SupportedDialect,
   ExecutorSpec,
+  RowsSpec,
 } from './datasource';
 export type { WhereInput, WhereCondition, RangeCondition, WhereScalar } from './where';
 export { Aggregate } from './enums/aggregate.enum';
@@ -52,3 +53,5 @@ export { InvalidDateFormatException } from './exceptions/invalid-date-format.exc
 export { InvalidIdentifierException } from './exceptions/invalid-identifier.exception';
 export { InvalidTimezoneException } from './exceptions/invalid-timezone.exception';
 export { SqliteTimezoneUnsupportedException } from './exceptions/sqlite-timezone-unsupported.exception';
+export { InvalidRowDateException } from './exceptions/invalid-row-date.exception';
+export { UnsupportedInRowsModeException } from './exceptions/unsupported-in-rows-mode.exception';
