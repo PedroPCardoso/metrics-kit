@@ -95,6 +95,10 @@ describe('MetricsBuilder.fromRows', () => {
     }
   });
 
+  it('toSql() throws UnsupportedInRowsModeException in rows mode', () => {
+    expect(() => build().count().toSql()).toThrow(UnsupportedInRowsModeException);
+  });
+
   it('rejects caching: in-memory rows have no stable query identity', () => {
     expect(() => MetricsBuilder.fromRows(rows, {}, { cache: { enabled: true, ttl: 60 } })).toThrow(
       ConfigurationError,
