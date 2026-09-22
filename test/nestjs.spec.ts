@@ -253,4 +253,111 @@ describe('NestJS integration', () => {
     callCache.destroy();
     await moduleRef.close();
   });
+
+  describe('non-TypeORM entry points', () => {
+    const ROWS = [
+      { id: 1, created_at: '2026-01-10 10:00:00', amount: 100 },
+      { id: 2, created_at: '2026-03-05 10:00:00', amount: 50 },
+    ];
+
+    it('fromRows produces the same result as the static builder', async () => {
+      const moduleRef = await Test.createTestingModule({
+        imports: [MetricsModule.forRoot()],
+      }).compile();
+      const service = moduleRef.get(MetricsService);
+
+      const viaService = await service
+        .fromRows(ROWS, { dateColumn: 'created_at' })
+        .sumByMonth('amount')
+        .forYear(2026)
+        .trends();
+      const viaStatic = await Metrics.fromRows(ROWS, { dateColumn: 'created_at' })
+        .sumByMonth('amount')
+        .forYear(2026)
+        .trends();
+
+      expect(viaService).toEqual(viaStatic);
+      await moduleRef.close();
+    });
+
+    it('fromRows inherits the module locale, and the call site overrides it', async () => {
+      const moduleRef = await Test.createTestingModule({
+        imports: [MetricsModule.forRoot({ locale: 'pt-BR' })],
+      }).compile();
+      const service = moduleRef.get(MetricsService);
+
+      const series = (await service
+        .fromRows(ROWS, { dateColumn: 'created_at' })
+        .sumByMonth('amount')
+        .forYear(2026)
+        .trends()) as TrendsResult;
+      expect(series.labels[0]).toBe('janeiro');
+
+      const overridden = (await service
+        .fromRows(ROWS, { dateColumn: 'created_at' }, { locale: 'fr' })
+        .sumByMonth('amount')
+        .forYear(2026)
+        .trends()) as TrendsResult;
+      expect(overridden.labels[0]).toBe('janvier');
+
+      await moduleRef.close();
+    });
+
+    it('a module-wide cache default does not break fromRows', async () => {
+      const cache = new MemoryCacheStore();
+      const moduleRef = await Test.createTestingModule({
+        imports: [
+          MetricsModule.forRoot({ cache: { enabled: true, ttl: 60 }, cacheStore: cache }),
+        ],
+      }).compile();
+      const service = moduleRef.get(MetricsService);
+
+      // Caching is unsupported in rows mode; the module default must not leak
+      // into fromRows or every call would throw ConfigurationError.
+      await expect(
+        service.fromRows(ROWS, { dateColumn: 'created_at' }).sum('amount').metrics(),
+      ).resolves.toBe(150);
+
+      cache.destroy();
+      await moduleRef.close();
+    });
+
+    it('queryExecutor produces the same result as the static builder', async () => {
+      const moduleRef = await Test.createTestingModule({
+        imports: [MetricsModule.forRoot()],
+      }).compile();
+      const service = moduleRef.get(MetricsService);
+
+      const executor = {
+        dialect: 'sqlite' as const,
+        execute: (sql: string, params: unknown[]) => dataSource.query(sql, params),
+      };
+      const spec = { table: 'orders', dateColumn: 'created_at' };
+
+      const viaService = await service.queryExecutor(executor, spec).count().metrics();
+      const viaStatic = await Metrics.queryExecutor(executor, spec).count().metrics();
+
+      expect(viaService).toEqual(viaStatic);
+      await moduleRef.close();
+    });
+
+    it('queryExecutor inherits the module locale', async () => {
+      const moduleRef = await Test.createTestingModule({
+        imports: [MetricsModule.forRoot({ locale: 'pt-BR' })],
+      }).compile();
+      const service = moduleRef.get(MetricsService);
+
+      const series = (await service
+        .queryExecutor({
+          dialect: 'sqlite' as const,
+          execute: (sql: string, params: unknown[]) => dataSource.query(sql, params),
+        }, { table: 'orders', dateColumn: 'created_at' })
+        .countByMonth('id')
+        .forYear(2026)
+        .trends()) as TrendsResult;
+
+      expect(series.labels[0]).toBe('janeiro');
+      await moduleRef.close();
+    });
+  });
 });
