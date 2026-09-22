@@ -3,6 +3,7 @@ import { RowsBackend } from '@core/backend/rows.backend';
 import { SemanticPlan } from '@core/backend/semantic-plan';
 import { Aggregate } from '@core/enums/aggregate.enum';
 import { InvalidRowDateException } from '@core/exceptions/invalid-row-date.exception';
+import { MetricsError } from '@core/exceptions/metrics.error';
 
 const col = (column: string) => ({ table: 'rows', column });
 
@@ -172,6 +173,26 @@ describe('RowsBackend', () => {
         groupByLabel: true,
       }, bad),
     ).rejects.toThrow(InvalidRowDateException);
+  });
+
+  it('InvalidRowDateException carries a stable MetricsError code and context', async () => {
+    const bad = [{ created_at: 'not-a-date', amount: 1 }];
+    try {
+      await run(
+        {
+          select: [{ expr: { kind: 'period', part: 'month', date: col('created_at') }, alias: 'label' }],
+          filters: [],
+          groupByLabel: true,
+        },
+        bad,
+      );
+      expect.unreachable('expected InvalidRowDateException');
+    } catch (err) {
+      expect(err).toBeInstanceOf(MetricsError);
+      expect(err).toBeInstanceOf(InvalidRowDateException);
+      expect((err as InvalidRowDateException).code).toBe('INVALID_ROW_DATE');
+      expect((err as InvalidRowDateException).context?.operation).toBe('fromRows');
+    }
   });
 
   it('reports the original row index (not the post-filter position) when a later row has an unparseable date', async () => {

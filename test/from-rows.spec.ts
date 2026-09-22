@@ -3,6 +3,7 @@ import { MetricsBuilder } from '@core/metrics.builder';
 import { Period } from '@core/enums/period.enum';
 import { UnsupportedInRowsModeException } from '@core/exceptions/unsupported-in-rows-mode.exception';
 import { ConfigurationError } from '@core/exceptions/configuration.exception';
+import { MetricsError } from '@core/exceptions/metrics.error';
 
 const rows = [
   { id: 1, created_at: '2026-01-10', amount: 100, status: 'paid', member_id: 1 },
@@ -83,9 +84,15 @@ describe('MetricsBuilder.fromRows', () => {
     expect(sp).toEqual({ labels: ['February'], data: [10] });
   });
 
-  it('rejects SQL-only settings', () => {
-    expect(() => build().table('other')).toThrow(UnsupportedInRowsModeException);
-    expect(() => build().count().toSql()).toThrow(UnsupportedInRowsModeException);
+  it('rejects SQL-only settings with a stable MetricsError code', () => {
+    try {
+      build().table('other');
+      expect.unreachable('expected UnsupportedInRowsModeException');
+    } catch (err) {
+      expect(err).toBeInstanceOf(MetricsError);
+      expect(err).toBeInstanceOf(UnsupportedInRowsModeException);
+      expect((err as UnsupportedInRowsModeException).code).toBe('UNSUPPORTED_IN_ROWS_MODE');
+    }
   });
 
   it('rejects caching: in-memory rows have no stable query identity', () => {
