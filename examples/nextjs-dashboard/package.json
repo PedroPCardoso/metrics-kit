@@ -1,0 +1,29 @@
+{
+  "name": "nextjs-dashboard-demo",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11",
+    "chart.js": "^4.5.1",
+    "drizzle-orm": "^0",
+    "luxon": "^3",
+    "nestjs-metrics-core": "*",
+    "next": "^14",
+    "nextjs-metrics": "*",
+    "react": "^18",
+    "react-dom": "^18",
+    "reflect-metadata": "^0.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7",
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "typescript": "^5"
+  }
+}

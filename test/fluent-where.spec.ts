@@ -70,4 +70,36 @@ describe('fluent where / whereIn', () => {
     expect(result.labels).not.toContain('pending');
     expect(result.labels).not.toContain('refunded');
   });
+
+  it('groupData() auto-discovery respects whereIn scoping (no out-of-scope series)', async () => {
+    // resolveGroupLabels() runs its own SELECT DISTINCT to discover the series
+    // set. It must carry the same where/whereIn scope as the data query, or an
+    // out-of-scope value ('pending'/'refunded') leaks out as a series name.
+    const result = (await exec()
+      .whereIn('status', ['paid'])
+      .countByMonth('status')
+      .forYear(2026)
+      .groupData()
+      .trends()) as { labels: (string | number)[]; data: Record<string, number[]> };
+
+    expect(Object.keys(result.data).sort()).toEqual(['paid', 'total']);
+    expect(result.data).not.toHaveProperty('pending');
+    expect(result.data).not.toHaveProperty('refunded');
+  });
+
+  it('rows mode scopes groupData() auto-discovery identically', async () => {
+    const result = (await MetricsBuilder.fromRows([
+      { created_at: '2026-01-10', status: 'paid' },
+      { created_at: '2026-01-20', status: 'pending' },
+      { created_at: '2026-02-05', status: 'paid' },
+    ])
+      .whereIn('status', ['paid'])
+      .countByMonth('status')
+      .forYear(2026)
+      .groupData()
+      .trends()) as { labels: (string | number)[]; data: Record<string, number[]> };
+
+    expect(Object.keys(result.data).sort()).toEqual(['paid', 'total']);
+    expect(result.data).not.toHaveProperty('pending');
+  });
 });

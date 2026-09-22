@@ -51,4 +51,17 @@ describe('executor SQL emission', () => {
     expect(calls[0].sql).toContain('BETWEEN $2 AND $3');
     expect(calls[0].params).toEqual([2026, 4, 6]);
   });
+
+  it('uses @p{n} placeholders and bracket-quoted identifiers for MSSQL', async () => {
+    const { ds, calls } = capture('mssql');
+    await MetricsBuilder.queryExecutor(ds, { table: 'orders', dateColumn: 'created_at' })
+      .sumByMonth('amount', 2)
+      .forYear(2026)
+      .forMonth(6)
+      .trends();
+    expect(calls[0].sql).toContain('FROM [orders]');
+    expect(calls[0].sql).toContain('WHERE DATEPART(year, [orders].[created_at]) = @p1');
+    expect(calls[0].sql).toContain('BETWEEN @p2 AND @p3');
+    expect(calls[0].params).toEqual([2026, 4, 6]);
+  });
 });

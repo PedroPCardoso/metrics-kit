@@ -16,6 +16,8 @@ export class LabelFormatter {
 
   format(rawLabel: unknown, period: Period | null, ctx: LabelContext): string | number {
     switch (period) {
+      case Period.HOUR:
+        return `${String(Number(rawLabel)).padStart(2, '0')}:00`;
       case Period.MONTH:
         return this.monthName(Number(rawLabel));
       case Period.DAY:

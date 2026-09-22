@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MetricsBuilder } from '@core/metrics.builder';
 import { Period } from '@core/enums/period.enum';
 import { UnsupportedInRowsModeException } from '@core/exceptions/unsupported-in-rows-mode.exception';
+import { ConfigurationError } from '@core/exceptions/configuration.exception';
 
 const rows = [
   { id: 1, created_at: '2026-01-10', amount: 100, status: 'paid', member_id: 1 },
@@ -84,5 +85,21 @@ describe('MetricsBuilder.fromRows', () => {
 
   it('rejects SQL-only settings', () => {
     expect(() => build().table('other')).toThrow(UnsupportedInRowsModeException);
+    expect(() => build().count().toSql()).toThrow(UnsupportedInRowsModeException);
+  });
+
+  it('rejects caching: in-memory rows have no stable query identity', () => {
+    expect(() => MetricsBuilder.fromRows(rows, {}, { cache: { enabled: true, ttl: 60 } })).toThrow(
+      ConfigurationError,
+    );
+    // Disabled cache options are fine — only an enabled cache is a misconfiguration.
+    expect(() =>
+      MetricsBuilder.fromRows(rows, {}, { cache: { enabled: false, ttl: 60 } }),
+    ).not.toThrow();
+  });
+
+  it('invalidate* are harmless no-ops in rows mode', async () => {
+    await expect(build().count().invalidateMetrics()).resolves.toBeUndefined();
+    await expect(build().countByMonth().invalidateTrends()).resolves.toBeUndefined();
   });
 });

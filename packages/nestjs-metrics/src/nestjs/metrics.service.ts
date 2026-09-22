@@ -1,6 +1,6 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import { ObjectLiteral, SelectQueryBuilder } from 'typeorm';
-import { MetricsBuilder, MetricsOptions } from 'nestjs-metrics-core';
+import { CacheStore, MetricsBuilder, MetricsOptions } from 'nestjs-metrics-core';
 import { METRICS_FEATURE_OPTIONS, METRICS_ROOT_OPTIONS, MetricsModuleOptions } from './tokens';
 
 /**
@@ -19,13 +19,31 @@ export class MetricsService {
     this.defaults = { ...root, ...feature };
   }
 
+  /**
+   * Open a {@link MetricsBuilder} over a TypeORM query builder, applying the
+   * resolved locale/timezone defaults (call-site options take precedence).
+   *
+   * @param qb - The TypeORM query builder to read from.
+   * @param options - Per-call locale/timezone overrides.
+   * @returns A builder ready for chaining.
+   *
+   * @example
+   * ```ts
+   * const series = await metricsService
+   *   .query(orderRepo.createQueryBuilder('order'))
+   *   .countByMonth('id', 3)
+   *   .trends();
+   * ```
+   */
   query<T extends ObjectLiteral>(
     qb: SelectQueryBuilder<T>,
     options: MetricsOptions = {},
+    cacheStore?: CacheStore,
   ): MetricsBuilder<T> {
     return MetricsBuilder.query(qb, {
       locale: options.locale ?? this.defaults.locale,
       timezone: options.timezone ?? this.defaults.timezone,
-    });
+      cache: options.cache ?? this.defaults.cache,
+    }, cacheStore ?? this.defaults.cacheStore);
   }
 }

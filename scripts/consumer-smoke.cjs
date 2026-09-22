@@ -6,6 +6,7 @@ require('reflect-metadata');
 const { DataSource, EntitySchema } = require('typeorm');
 const { Metrics, metricsFor, withMetrics } = require('nestjs-metrics');
 const { MetricsModule, MetricsService } = require('nestjs-metrics/nestjs');
+const { toChartJs, toApexCharts, toRecharts } = require('nestjs-metrics-core/charts');
 
 const Order = new EntitySchema({
   name: 'Order',
@@ -45,8 +46,12 @@ const Order = new EntitySchema({
   assert.strictEqual(typeof MetricsModule.forRoot, 'function');
   assert.strictEqual(typeof MetricsService, 'function');
 
+  assert.strictEqual(typeof toChartJs, 'function');
+  assert.strictEqual(typeof toApexCharts, 'function');
+  assert.strictEqual(typeof toRecharts, 'function');
+
   await ds.destroy();
-  console.log('✓ consumer smoke OK — package imports and works as CJS (core + /nestjs)');
+  console.log('✓ consumer smoke OK — package imports and works as CJS (core + /nestjs + /charts)');
 })().catch((err) => {
   console.error('✗ consumer smoke FAILED');
   console.error(err);

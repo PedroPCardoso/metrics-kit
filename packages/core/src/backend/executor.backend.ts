@@ -1,6 +1,8 @@
 import { DataSource, Row } from '../datasource';
 import { dialectFor } from '../dialects/dialect.factory';
 import { SqlDialect } from '../dialects/sql-dialect.interface';
+import { MetricsError } from '../exceptions/metrics.error';
+import { QueryExecutionError } from '../exceptions/query-execution.exception';
 import { SqliteTimezoneUnsupportedException } from '../exceptions/sqlite-timezone-unsupported.exception';
 import { normalizeData, normalizeLabel } from '../formatting/normalize';
 import { QueryBackend } from './query-backend.interface';
@@ -12,13 +14,13 @@ import { SemanticPlan } from './semantic-plan';
 const NAMED_PARAM = /(?<!:):([a-zA-Z_][a-zA-Z0-9_]*)/g;
 
 /**
- * Renders a QueryPlan into a single parameterized SQL string and runs it through
- * the DataSource executor. Identifiers were already validated upstream
- * (assertSafeIdentifier); values flow only as positional bound parameters, so
- * the assembled SQL is injection-safe.
+ * Renders a SemanticPlan into a single parameterized SQL string and runs it
+ * through the DataSource executor. Identifiers were already validated upstream
+ * (assertSafeIdentifier) and are escaped here; values flow only as positional
+ * bound parameters, so the assembled SQL is injection-safe.
  */
 export class ExecutorBackend implements QueryBackend {
-  private readonly dialect: SqlDialect;
+  readonly dialect: SqlDialect;
 
   constructor(
     private readonly dataSource: DataSource,
@@ -28,14 +30,43 @@ export class ExecutorBackend implements QueryBackend {
     this.dialect = dialectFor(dataSource.dialect);
   }
 
+  escapeId(name: string): string {
+    return this.dialect.escapeId(name);
+  }
+
   async run(plan: SemanticPlan): Promise<Row[]> {
     if (plan.tz && this.dataSource.dialect === 'sqlite') {
       throw new SqliteTimezoneUnsupportedException(plan.tz);
     }
-    const rendered = renderPlan(plan, this.dialect, (name) => this.dialect.escapeId(name));
-    const { sql, params } = this.assemble(rendered);
-    const rows = await this.dataSource.execute(sql, params);
+    const { sql, params } = this.assemble(this.render(plan));
+    let rows: Row[];
+    try {
+      rows = await this.dataSource.execute(sql, params);
+    } catch (err) {
+      // Already one of ours (e.g. a missing bound parameter) — let it through.
+      if (err instanceof MetricsError) {
+        throw err;
+      }
+      throw new QueryExecutionError(err, {
+        query: sql,
+        params,
+        dialect: this.dataSource.dialect,
+        operation: 'execute',
+      });
+    }
     return rows.map((row) => this.normalizeRow(row));
+  }
+
+  toSql(plan: SemanticPlan, mask = false): string {
+    const { sql, params } = this.assemble(this.render(plan));
+    if (mask) {
+      return this.redact(sql, params);
+    }
+    return this.interpolate(sql, params);
+  }
+
+  private render(plan: SemanticPlan): QueryPlan {
+    return renderPlan(plan, this.dialect, (name) => this.escapeId(name));
   }
 
   private assemble(plan: QueryPlan): { sql: string; params: unknown[] } {
@@ -57,12 +88,39 @@ export class ExecutorBackend implements QueryBackend {
     return this.bind(sql, plan.params);
   }
 
+  private interpolate(sql: string, params: unknown[]): string {
+    let idx = 0;
+    return sql.replace(/\$(\d+)|\?/g, () => {
+      const value = params[idx++];
+      return this.formatValue(value);
+    });
+  }
+
+  private formatValue(value: unknown): string {
+    if (value === null || value === undefined) return 'NULL';
+    if (typeof value === 'number') return String(value);
+    if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
+    return `'${String(value).replace(/'/g, "''")}'`;
+  }
+
+  private redact(sql: string, params: unknown[]): string {
+    let idx = 0;
+    return sql.replace(/\$(\d+)|\?/g, () => {
+      idx++;
+      return typeof params[idx - 1] === 'number' ? '0' : "'[REDACTED]'";
+    });
+  }
+
   /** Replace each `:name` with the dialect's positional placeholder, in order. */
   private bind(sql: string, named: Record<string, unknown>): { sql: string; params: unknown[] } {
     const params: unknown[] = [];
     const bound = sql.replace(NAMED_PARAM, (_match, name: string) => {
       if (!(name in named)) {
-        throw new Error(`nestjs-metrics: missing bound parameter ":${name}"`);
+        throw new MetricsError(
+          `nestjs-metrics: missing bound parameter ":${name}"`,
+          'MISSING_BOUND_PARAMETER',
+          { params: named },
+        );
       }
       params.push(named[name]);
       return this.dialect.placeholder(params.length);

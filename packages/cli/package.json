@@ -1,0 +1,64 @@
+{
+  "name": "@nestjs-metrics/cli",
+  "version": "0.2.1",
+  "private": true,
+  "description": "CLI, generators and offline playground for nestjs-metrics. Scaffold dashboards, validate projects and preview metrics locally.",
+  "keywords": [
+    "nestjs",
+    "metrics",
+    "cli",
+    "dashboard",
+    "analytics",
+    "playground",
+    "scaffold",
+    "generator",
+    "typescript"
+  ],
+  "author": "Pedro Cardoso",
+  "license": "MIT",
+  "sideEffects": false,
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "metrics": "./dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PedroPCardoso/metrics-kit.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/PedroPCardoso/metrics-kit#readme",
+  "bugs": {
+    "url": "https://github.com/PedroPCardoso/metrics-kit/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "commander": "^12.1.0"
+  }
+}

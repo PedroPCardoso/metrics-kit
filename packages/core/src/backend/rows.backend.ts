@@ -3,6 +3,7 @@ import { Row } from '../datasource';
 import { Aggregate } from '../enums/aggregate.enum';
 import { DatePart } from '../dialects/sql-dialect.interface';
 import { InvalidRowDateException } from '../exceptions/invalid-row-date.exception';
+import { UnsupportedInRowsModeException } from '../exceptions/unsupported-in-rows-mode.exception';
 import { WhereCondition, RangeCondition } from '../where';
 import { QueryBackend } from './query-backend.interface';
 import { Filter, SelectExpr, SemanticPlan } from './semantic-plan';
@@ -18,6 +19,20 @@ type SourceRow = Record<string, unknown>;
  */
 export class RowsBackend implements QueryBackend {
   constructor(private readonly rows: SourceRow[]) {}
+
+  /**
+   * Rows are addressed by bare property name, so there is nothing to quote:
+   * the identity is the honest implementation, not a stub. Identifiers are
+   * still validated upstream (assertSafeIdentifier) as in the SQL modes.
+   */
+  escapeId(name: string): string {
+    return name;
+  }
+
+  /** There is no SQL behind a rows-mode builder; a synthesized string would lie. */
+  toSql(): string {
+    throw new UnsupportedInRowsModeException('toSql');
+  }
 
   async run(plan: SemanticPlan): Promise<Row[]> {
     const zone = plan.tz ?? 'UTC';
@@ -95,6 +110,8 @@ export class RowsBackend implements QueryBackend {
 
   private periodValue(part: DatePart, dt: DateTime): number {
     switch (part) {
+      case 'hour':
+        return dt.hour;
       case 'day':
         return dt.day;
       case 'week':
@@ -108,6 +125,9 @@ export class RowsBackend implements QueryBackend {
 
   private bucketValue(part: DatePart, dt: DateTime): string {
     switch (part) {
+      // Mirrors the SQL dialects' hour bucket format (`YYYY-MM-DD HH24:00`).
+      case 'hour':
+        return dt.toFormat('yyyy-MM-dd HH:00');
       case 'day':
         return dt.toFormat('yyyy-MM-dd');
       case 'week':
@@ -182,6 +202,11 @@ function aggregate(fn: Aggregate, values: unknown[]): number | string {
   const present = values.filter((value) => value !== null && value !== undefined);
   if (fn === Aggregate.COUNT) {
     return present.length;
+  }
+  if (fn === Aggregate.COUNT_DISTINCT) {
+    // SQL compares distinct values by value; normalize through String() so a
+    // driver returning 1 and '1' counts once, matching looseEquals elsewhere.
+    return new Set(present.map((value) => String(value))).size;
   }
   if (fn === Aggregate.MAX || fn === Aggregate.MIN) {
     if (present.length === 0) {

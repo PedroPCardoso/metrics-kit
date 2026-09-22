@@ -1,7 +1,9 @@
 import Database from 'better-sqlite3';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { MemoryCacheStore } from 'nestjs-metrics-core';
 import { prismaMetrics, type PrismaClientLike } from 'nextjs-metrics';
 import { drizzleMetrics, type DrizzleClientLike } from 'nextjs-metrics';
+import { kyselyMetrics, type KyselyClientLike } from 'nextjs-metrics/kysely';
 
 /**
  * The Prisma and Drizzle adapters are thin wrappers over the core executor.
@@ -13,6 +15,7 @@ describe('nextjs adapters (Prisma + Drizzle over SQLite)', () => {
   let db: Database.Database;
   let prisma: PrismaClientLike;
   let drizzle: DrizzleClientLike;
+  let kysely: KyselyClientLike;
 
   beforeAll(() => {
     db = new Database(':memory:');
@@ -40,6 +43,20 @@ describe('nextjs adapters (Prisma + Drizzle over SQLite)', () => {
         db.prepare(sql).all(...params) as T,
     };
     drizzle = { $client: db };
+    kysely = {
+      executeQuery: async <R>({
+        sql,
+        parameters,
+      }: {
+        sql: string;
+        parameters: readonly unknown[];
+        query: unknown;
+        executionType: string;
+      }) => {
+        const rows = db.prepare(sql).all(...(parameters as unknown[]));
+        return { rows: rows as R[] };
+      },
+    };
   });
 
   afterAll(() => db.close());
@@ -51,9 +68,29 @@ describe('nextjs adapters (Prisma + Drizzle over SQLite)', () => {
     expect(await prismaMetrics(prisma, spec).sum('amount').metrics()).toBe(900);
   });
 
+  it('prisma adapter forwards a custom cache store', async () => {
+    const cache = new MemoryCacheStore();
+    const opts = { cache: { enabled: true, ttl: 60 } };
+
+    expect(await prismaMetrics(prisma, spec, opts, cache).count().metrics()).toBe(7);
+    expect(await prismaMetrics(prisma, spec, opts, cache).count().metrics()).toBe(7);
+    expect(cache.stats().hits).toBe(1);
+    cache.destroy();
+  });
+
   it('drizzle adapter: count and sum', async () => {
     expect(await drizzleMetrics(drizzle, spec).count().metrics()).toBe(7);
     expect(await drizzleMetrics(drizzle, spec).sum('amount').metrics()).toBe(900);
+  });
+
+  it('drizzle adapter forwards a custom cache store', async () => {
+    const cache = new MemoryCacheStore();
+    const opts = { cache: { enabled: true, ttl: 60 } };
+
+    expect(await drizzleMetrics(drizzle, spec, opts, cache).count().metrics()).toBe(7);
+    expect(await drizzleMetrics(drizzle, spec, opts, cache).count().metrics()).toBe(7);
+    expect(cache.stats().hits).toBe(1);
+    cache.destroy();
   });
 
   it('structured where flows through both adapters', async () => {
@@ -75,5 +112,41 @@ describe('nextjs adapters (Prisma + Drizzle over SQLite)', () => {
       .trends();
     expect(fromPrisma).toEqual(fromDrizzle);
     expect((fromPrisma as { data: number[] }).data.slice(0, 5)).toEqual([150, 275, 325, 0, 150]);
+  });
+
+  const kyselySpec = { table: 'orders', dateColumn: 'created_at', dialect: 'sqlite' as const };
+
+  it('kysely adapter: count and sum', async () => {
+    expect(await kyselyMetrics(kysely, kyselySpec).count().metrics()).toBe(7);
+    expect(await kyselyMetrics(kysely, kyselySpec).sum('amount').metrics()).toBe(900);
+  });
+
+  it('kysely adapter forwards a custom cache store', async () => {
+    const cache = new MemoryCacheStore();
+    const opts = { cache: { enabled: true, ttl: 60 } };
+
+    expect(await kyselyMetrics(kysely, kyselySpec, opts, cache).count().metrics()).toBe(7);
+    expect(await kyselyMetrics(kysely, kyselySpec, opts, cache).count().metrics()).toBe(7);
+    expect(cache.stats().hits).toBe(1);
+    cache.destroy();
+  });
+
+  it('structured where flows through the kysely adapter', async () => {
+    const paid = { ...kyselySpec, where: { status: 'paid' } };
+    expect(await kyselyMetrics(kysely, paid).sum('amount').metrics()).toBe(750);
+  });
+
+  it('kysely adapter trends match prisma/drizzle', async () => {
+    const fromKysely = await kyselyMetrics(kysely, kyselySpec)
+      .sumByMonth('amount')
+      .forYear(2026)
+      .fillMissingData()
+      .trends();
+    const fromPrisma = await prismaMetrics(prisma, spec)
+      .sumByMonth('amount')
+      .forYear(2026)
+      .fillMissingData()
+      .trends();
+    expect(fromKysely).toEqual(fromPrisma);
   });
 });

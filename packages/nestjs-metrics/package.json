@@ -1,7 +1,7 @@
 {
   "name": "nestjs-metrics",
-  "version": "0.2.4",
-  "description": "Generate metrics and trends from your TypeORM entities for your dashboards, with a NestJS module. (Built on nestjs-metrics-core.)",
+  "version": "0.5.0",
+  "description": "Generate chart-ready metrics and trends from your TypeORM entities in NestJS. Fluent API, locale/timezone-aware bucketing, PostgreSQL/MySQL/SQLite.",
   "keywords": [
     "nestjs",
     "typeorm",
@@ -9,10 +9,18 @@
     "trends",
     "charts",
     "dashboard",
-    "analytics"
+    "analytics",
+    "time-series",
+    "fluent-api",
+    "laravel-metrics",
+    "postgresql",
+    "mysql",
+    "sqlite",
+    "typescript"
   ],
   "author": "Pedro Cardoso",
   "license": "MIT",
+  "sideEffects": false,
   "repository": {
     "type": "git",
     "url": "git+https://github.com/PedroPCardoso/metrics-kit.git",
@@ -24,21 +32,28 @@
   },
   "type": "commonjs",
   "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
       "require": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "default": "./dist/index.js"
     },
     "./nestjs": {
+      "types": "./dist/nestjs/index.d.ts",
+      "import": "./dist/nestjs/index.mjs",
       "require": "./dist/nestjs/index.js",
-      "types": "./dist/nestjs/index.d.ts"
+      "default": "./dist/nestjs/index.js"
     },
     "./package.json": "./package.json"
   },
   "files": [
     "dist",
-    "nestjs"
+    "nestjs",
+    "README.md",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=18"
@@ -52,7 +67,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "nestjs-metrics-core": "^0.1.0"
+    "nestjs-metrics-core": "^0.4.0"
   },
   "peerDependencies": {
     "@nestjs/common": "^10 || ^11",

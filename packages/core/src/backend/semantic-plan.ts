@@ -43,6 +43,13 @@ export type Filter =
  * run. SQL backends render it (render-plan.ts); the rows backend interprets it.
  */
 export interface SemanticPlan {
+  /**
+   * Stable identity for the query source (table, FROM fragment, or base
+   * query). Opaque cache-key material, never a SQL expression: it is passed
+   * straight through renderPlan() into QueryPlan.source, and the rows backend
+   * ignores it entirely.
+   */
+  source: string;
   select: SemanticSelectItem[];
   filters: Filter[];
   groupByLabel?: boolean;

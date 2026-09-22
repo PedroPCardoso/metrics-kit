@@ -1,17 +1,31 @@
 {
   "name": "nestjs-metrics-core",
-  "version": "0.1.0",
-  "description": "ORM-agnostic metrics & trends engine. Dual-mode: TypeORM query builder or a raw-SQL executor (Prisma/Drizzle/any driver).",
+  "version": "0.4.0",
+  "description": "ORM-agnostic metrics & trends engine. Build chart-ready time-series from TypeORM, Prisma, Drizzle or any SQL driver via a fluent API.",
   "keywords": [
     "metrics",
     "trends",
     "charts",
     "dashboard",
     "analytics",
-    "sql"
+    "sql",
+    "fluent-api",
+    "typeorm",
+    "prisma",
+    "drizzle",
+    "postgresql",
+    "mysql",
+    "sqlite",
+    "time-series",
+    "typescript"
   ],
   "author": "Pedro Cardoso",
   "license": "MIT",
+  "sideEffects": false,
+  "homepage": "https://github.com/PedroPCardoso/metrics-kit#readme",
+  "bugs": {
+    "url": "https://github.com/PedroPCardoso/metrics-kit/issues"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/PedroPCardoso/metrics-kit.git",
@@ -19,16 +33,28 @@
   },
   "type": "commonjs",
   "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
       "require": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "default": "./dist/index.js"
+    },
+    "./charts": {
+      "types": "./dist/charts/index.d.ts",
+      "import": "./dist/charts/index.mjs",
+      "require": "./dist/charts/index.js",
+      "default": "./dist/charts/index.js"
     },
     "./package.json": "./package.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "charts",
+    "README.md",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=18"
@@ -42,7 +68,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "luxon": "^3"
+    "luxon": "^3",
+    "zod": "^3"
   },
   "peerDependencies": {
     "typeorm": "^0.3"

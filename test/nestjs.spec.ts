@@ -3,7 +3,13 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { Inject, Injectable, Module } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
-import { Metrics, metricsFor, TrendsResult, withMetrics } from 'nestjs-metrics-core';
+import {
+  MemoryCacheStore,
+  Metrics,
+  metricsFor,
+  TrendsResult,
+  withMetrics,
+} from 'nestjs-metrics-core';
 import { MetricsModule, MetricsService } from 'nestjs-metrics/nestjs';
 import {
   Order,
@@ -173,6 +179,78 @@ describe('NestJS integration', () => {
     expect(
       await service.query(ordersQuery(dataSource)).count().between('2026-07-14', '2026-07-14').metrics(),
     ).toBe(1);
+    await moduleRef.close();
+  });
+
+  it('forwards call-site cache options and cache store', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [MetricsModule.forRoot()],
+    }).compile();
+    const service = moduleRef.get(MetricsService);
+    const cache = new MemoryCacheStore();
+    const opts = { cache: { enabled: true, ttl: 60 } };
+
+    const first = await service.query(ordersQuery(dataSource), opts, cache).count().metrics();
+    const second = await service.query(ordersQuery(dataSource), opts, cache).count().metrics();
+
+    expect(first).toBe(1);
+    expect(second).toBe(1);
+    expect(cache.stats().hits).toBe(1);
+    cache.destroy();
+    await moduleRef.close();
+  });
+
+  it('resolves cache precedence: call > forFeature > forRoot', async () => {
+    const rootCache = new MemoryCacheStore();
+    const featureCache = new MemoryCacheStore();
+    const callCache = new MemoryCacheStore();
+
+    @Injectable()
+    class FeatureConsumer {
+      constructor(@Inject(MetricsService) readonly metrics: MetricsService) {}
+    }
+    @Module({
+      imports: [
+        MetricsModule.forFeature({
+          cache: { enabled: true, ttl: 60, keyPrefix: 'feature' },
+          cacheStore: featureCache,
+        }),
+      ],
+      providers: [FeatureConsumer],
+    })
+    class ReportsModule {}
+
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        MetricsModule.forRoot({
+          cache: { enabled: true, ttl: 60, keyPrefix: 'root' },
+          cacheStore: rootCache,
+        }),
+        ReportsModule,
+      ],
+    }).compile();
+    const feature = moduleRef.select(ReportsModule).get(FeatureConsumer).metrics;
+
+    await feature.query(ordersQuery(dataSource)).count().metrics();
+    await feature.query(ordersQuery(dataSource)).count().metrics();
+    expect(featureCache.stats().hits).toBe(1);
+    expect(rootCache.stats().hits).toBe(0);
+
+    await feature.query(
+      ordersQuery(dataSource),
+      { cache: { enabled: true, ttl: 60, keyPrefix: 'call' } },
+      callCache,
+    ).count().metrics();
+    await feature.query(
+      ordersQuery(dataSource),
+      { cache: { enabled: true, ttl: 60, keyPrefix: 'call' } },
+      callCache,
+    ).count().metrics();
+    expect(callCache.stats().hits).toBe(1);
+
+    rootCache.destroy();
+    featureCache.destroy();
+    callCache.destroy();
     await moduleRef.close();
   });
 });

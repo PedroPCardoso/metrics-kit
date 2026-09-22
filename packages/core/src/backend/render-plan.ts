@@ -86,6 +86,7 @@ export function renderPlan(
   }
 
   return {
+    source: plan.source,
     select,
     where,
     groupBy: plan.groupByLabel ? 'label' : undefined,

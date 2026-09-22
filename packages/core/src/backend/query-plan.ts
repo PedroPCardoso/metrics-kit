@@ -11,6 +11,8 @@ export interface SelectItem {
  * executor backend into a raw parameterized SQL string.
  */
 export interface QueryPlan {
+  /** Stable identity for the query source (table, FROM fragment, or base query). */
+  source: string;
   select: SelectItem[];
   /** WHERE fragments, ANDed together. May reference `:name` params. */
   where: string[];

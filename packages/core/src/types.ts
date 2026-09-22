@@ -1,6 +1,8 @@
 /** A chart-ready time series: parallel label/data arrays. */
 export interface TrendsResult {
+  /** Bucket labels (e.g. month names), in chart order. */
   labels: (string | number)[];
+  /** Aggregate value per bucket, aligned to {@link TrendsResult.labels}. */
   data: number[];
 }
 
@@ -9,26 +11,40 @@ export interface TrendsResult {
  * series per group, alongside the `total` series.
  */
 export interface GroupedTrendsResult {
+  /** Shared bucket labels for every series, in chart order. */
   labels: (string | number)[];
+  /** One numeric series per group value, plus a `total` series across all groups. */
   data: {
     total: number[];
     [group: string]: number[];
   };
 }
 
+/**
+ * Two aligned trend series: the current window side by side with a shifted
+ * comparison window, sharing a single label axis.
+ */
+export interface TrendsComparisonResult {
+  /** Shared bucket labels for both series, in chart order. */
+  labels: (string | number)[];
+  /** Aggregate values for the current (unshifted) window. */
+  current: number[];
+  /** Aggregate values for the shifted comparison window. */
+  previous: number[];
+}
+
 /** A metric plus its variation against a prior period. */
 export interface VariationResult {
+  /** The current period's aggregate value. */
   count: number;
+  /** Direction and magnitude of the change versus the prior period. */
   variation: {
+    /** Whether the metric rose, fell, or held steady. */
     type: 'none' | 'increase' | 'decrease';
+    /** Absolute delta, or a percentage string when requested via `inPercent`. */
     value: number | string;
   };
 }
 
 /** Per-call configuration for a metrics query. */
-export interface MetricsOptions {
-  /** BCP-47 locale used to translate period labels. Defaults to `en`. */
-  locale?: string;
-  /** IANA timezone the date column is bucketed in. Defaults to `UTC`. */
-  timezone?: string;
-}
+export type { MetricsOptions } from './options.schema';

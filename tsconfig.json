@@ -11,6 +11,7 @@
       "nextjs-metrics": ["packages/nextjs-metrics/src/index.ts"],
       "nextjs-metrics/prisma": ["packages/nextjs-metrics/src/prisma/index.ts"],
       "nextjs-metrics/drizzle": ["packages/nextjs-metrics/src/drizzle/index.ts"],
+      "nextjs-metrics/kysely": ["packages/nextjs-metrics/src/kysely/index.ts"],
       "@core/*": ["packages/core/src/*"]
     }
   },

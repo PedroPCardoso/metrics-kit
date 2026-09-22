@@ -1,5 +1,6 @@
 {
   "main": "../dist/drizzle/index.js",
+  "module": "../dist/drizzle/index.mjs",
   "types": "../dist/drizzle/index.d.ts",
   "sideEffects": false
 }

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": [
+    ".eslintrc.json",
+    "package-lock.json",
+    "tsconfig.base.json",
+    "tsconfig.json",
+    "typedoc.json",
+    "vitest.config.ts"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"]
+    },
+    "typecheck": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "//#typecheck:root": {
+      "outputs": []
+    },
+    "//#lint:root": {
+      "outputs": []
+    },
+    "//#test:root": {
+      "outputs": []
+    },
+    "//#test:coverage:root": {
+      "outputs": ["coverage/**"]
+    },
+    "//#coverage:check:root": {
+      "outputs": ["coverage/**"]
+    },
+    "//#docs:api:root": {
+      "outputs": ["docs/api/**"]
+    },
+    "//#smoke:root": {
+      "outputs": []
+    }
+  }
+}

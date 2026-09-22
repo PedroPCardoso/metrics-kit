@@ -13,7 +13,11 @@ const rows = [
   { created_at: new Date('2026-03-01T12:00:00Z'), amount: 300, status: 'paid', member_id: 3 },
 ];
 
-const run = (plan: SemanticPlan, data: Record<string, unknown>[] = rows) => new RowsBackend(data).run(plan);
+/** `source` is opaque cache-key material the rows backend ignores. */
+type Plan = Omit<SemanticPlan, 'source'>;
+
+const run = (plan: Plan, data: Record<string, unknown>[] = rows) =>
+  new RowsBackend(data).run({ source: 'rows', ...plan });
 
 describe('RowsBackend', () => {
   it('aggregates a bare metric', async () => {
@@ -56,7 +60,7 @@ describe('RowsBackend', () => {
   it('extracts periods in the configured timezone (UTC−3 month boundary)', async () => {
     // 2026-03-01T01:00Z is still 2026-02-28 in America/Sao_Paulo (UTC−3).
     const boundary = [{ created_at: '2026-03-01T01:00:00Z', amount: 10 }];
-    const plan = (tz?: string): SemanticPlan => ({
+    const plan = (tz?: string): Plan => ({
       select: [{ expr: { kind: 'period', part: 'month', date: col('created_at') }, alias: 'label' },
                { expr: { kind: 'aggregate', fn: Aggregate.SUM, column: col('amount') }, alias: 'data' }],
       filters: [],

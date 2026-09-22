@@ -5,40 +5,98 @@ on:
     branches: [main, master]
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  TURBO_TELEMETRY_DISABLED: 1
+
 jobs:
-  build-test:
+  lint-typecheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: 'npm'
+      - run: npm ci
+      - name: Restore Turbo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-lint-typecheck-${{ hashFiles('package-lock.json', 'package.json', 'turbo.json', 'packages/**/package.json', 'packages/**/tsup.config.ts', 'tsconfig*.json', 'vitest.config.ts', 'typedoc.json', '.eslintrc.json') }}
+          restore-keys: |
+            turbo-${{ runner.os }}-lint-typecheck-
+            turbo-${{ runner.os }}-
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run docs:api
 
-      - name: Build dev image
-        run: docker compose build dev
+  test:
+    needs: [lint-typecheck]
+    strategy:
+      matrix:
+        node-version: [20, 22]
+        nestjs-version: [10, 11]
+      fail-fast: false
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: metrics
+          POSTGRES_PASSWORD: metrics
+          POSTGRES_DB: metrics
+        ports:
+          - 5432:5432
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_USER: metrics
+          MYSQL_PASSWORD: metrics
+          MYSQL_DATABASE: metrics
+        ports:
+          - 3306:3306
+    steps:
+      - uses: actions/checkout@v7
 
-      - name: Install dependencies
-        run: docker compose run --rm dev npm install
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
 
-      - name: Lint
-        run: docker compose run --rm dev npm run lint
+      - run: npm ci
+      - name: Restore Turbo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-test-node-${{ matrix.node-version }}-nestjs-${{ matrix.nestjs-version }}-${{ hashFiles('package-lock.json', 'package.json', 'turbo.json', 'packages/**/package.json', 'packages/**/tsup.config.ts', 'tsconfig*.json', 'vitest.config.ts', 'typedoc.json', '.eslintrc.json') }}
+          restore-keys: |
+            turbo-${{ runner.os }}-test-node-${{ matrix.node-version }}-nestjs-${{ matrix.nestjs-version }}-
+            turbo-${{ runner.os }}-test-node-${{ matrix.node-version }}-
+            turbo-${{ runner.os }}-
 
-      - name: Typecheck
-        run: docker compose run --rm dev npm run typecheck
+      - name: Override NestJS version
+        run: npm install @nestjs/common@^${{ matrix.nestjs-version }} @nestjs/core@^${{ matrix.nestjs-version }} @nestjs/testing@^${{ matrix.nestjs-version }} --no-save
 
-      - name: Start databases (Postgres + MySQL)
-        run: docker compose up -d --wait postgres mysql
-
-      - name: Load MySQL timezone tables (zones used by tests)
+      - name: Wait for databases and load MySQL timezone tables
         run: bash scripts/load-mysql-tz.sh
 
-      - name: Test (SQLite + Postgres + MySQL)
-        run: docker compose run --rm -e PG_HOST=postgres -e MYSQL_HOST=mysql dev npm test
+      - name: Run tests with coverage (SQLite + Postgres + MySQL)
+        run: npm run coverage:check
+        env:
+          PG_HOST: localhost
+          PG_PORT: 5432
+          MYSQL_HOST: localhost
+          MYSQL_PORT: 3306
 
       - name: Build
-        run: docker compose run --rm dev npm run build
+        run: npm run build
 
-      # NOTE: consumer smoke is disabled pre-publish — nestjs-metrics depends on
-      # nestjs-metrics-core, which isn't on npm yet, so a packed tarball can't
-      # resolve it in a fresh project. Re-enable once the packages publish.
-
-      - name: Stop databases
-        if: always()
-        run: docker compose down -v
+      - name: Smoke test (ESM + CJS + TypeScript resolution)
+        run: npm run smoke

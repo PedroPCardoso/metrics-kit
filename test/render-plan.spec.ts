@@ -11,6 +11,7 @@ const col = (column: string) => ({ table: 'orders', column });
 describe('renderPlan', () => {
   it('renders an aggregate metric with period filters (matches legacy SQL)', () => {
     const plan: SemanticPlan = {
+      source: 'orders',
       select: [{ expr: { kind: 'aggregate', fn: Aggregate.SUM, column: col('amount') }, alias: 'data' }],
       filters: [
         { kind: 'periodEq', part: 'year', value: 2026, date: col('created_at') },
@@ -28,6 +29,7 @@ describe('renderPlan', () => {
 
   it('renders period label + groupBy/orderBy for trends', () => {
     const plan: SemanticPlan = {
+      source: 'orders',
       select: [
         { expr: { kind: 'aggregate', fn: Aggregate.COUNT, column: col('id') }, alias: 'data' },
         { expr: { kind: 'period', part: 'month', date: col('created_at') }, alias: 'label' },
@@ -43,6 +45,7 @@ describe('renderPlan', () => {
 
   it('applies timezone conversion to date expressions and binds nm_tz', () => {
     const plan: SemanticPlan = {
+      source: 'orders',
       select: [{ expr: { kind: 'period', part: 'day', date: col('created_at') }, alias: 'label' }],
       filters: [],
       tz: 'America/Sao_Paulo',
@@ -55,6 +58,7 @@ describe('renderPlan', () => {
 
   it('renders structured where filters with sequential nm_w params', () => {
     const plan: SemanticPlan = {
+      source: 'orders',
       select: [{ expr: { kind: 'aggregate', fn: Aggregate.COUNT, column: col('id') }, alias: 'data' }],
       filters: [
         { kind: 'where', column: col('status'), condition: 'paid' },
@@ -77,6 +81,7 @@ describe('renderPlan', () => {
 
   it('renders dateBetween, grouped aggregates and distinct column selects', () => {
     const plan: SemanticPlan = {
+      source: 'orders',
       select: [
         { expr: { kind: 'aggregate', fn: Aggregate.SUM, column: col('amount') }, alias: 'data' },
         { expr: { kind: 'bucket', part: 'day', date: col('created_at') }, alias: 'label' },
@@ -94,6 +99,7 @@ describe('renderPlan', () => {
     expect(rendered.params).toMatchObject({ nm_g0: 'paid', nm_start: '2026-01-01', nm_end: '2026-03-31' });
 
     const distinctPlan: SemanticPlan = {
+      source: 'orders',
       select: [{ expr: { kind: 'column', column: col('status') }, alias: 'label' }],
       filters: [],
       distinct: true,

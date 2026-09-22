@@ -68,6 +68,39 @@ describe.each(allTestDrivers())('groupData on %s', (driver: TestDriver) => {
     expect(r.data.delivered).toEqual([1, 0, 0]);
   });
 
+  it('auto-discovers group labels when none are provided', async () => {
+    await seedOrders(dataSource, [
+      { createdAt: '2026-01-10 10:00:00', status: 'pending' },
+      { createdAt: '2026-01-11 10:00:00', status: 'pending' },
+      { createdAt: '2026-01-12 10:00:00', status: 'delivered' },
+      { createdAt: '2026-03-10 10:00:00', status: 'pending' },
+      { createdAt: '2026-03-11 10:00:00', status: 'cancelled' },
+    ]);
+
+    const r = (await m()
+      .countByMonth('status')
+      .groupData()
+      .forYear(2026)
+      .trends()) as GroupedTrendsResult;
+
+    expect(r.labels).toEqual(['January', 'March']);
+    expect(r.data.total).toEqual([3, 2]);
+    expect(r.data.pending).toEqual([2, 1]);
+    expect(r.data.delivered).toEqual([1, 0]);
+    expect(r.data.cancelled).toEqual([0, 1]);
+  });
+
+  it('auto-discovers an empty set when no data matches the period', async () => {
+    const r = (await m()
+      .countByMonth('status')
+      .groupData()
+      .forYear(2026)
+      .trends()) as GroupedTrendsResult;
+
+    expect(r.labels).toEqual([]);
+    expect(r.data).toEqual({ total: [] });
+  });
+
   it('binds group values as parameters (no SQL injection via the value)', async () => {
     await seedOrders(dataSource, [
       { createdAt: '2026-01-10 10:00:00', status: "x'y" },
