@@ -62,4 +62,8 @@ describe('SQL backend and RowsBackend answer identically', () => {
     same((b) =>
       b.sumByMonth('amount', 0).forYear(2026).groupData(['paid', 'pending']).fillMissingData(),
     ));
+  it('date-string range where filter', () =>
+    same((b) => b.where('created_at', { gte: '2026-02-01' }).count(), 'metrics'));
+  it('empty range where object matches every row', () =>
+    same((b) => b.where('status', {}).count(), 'metrics'));
 });

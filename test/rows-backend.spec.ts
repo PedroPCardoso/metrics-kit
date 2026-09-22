@@ -93,6 +93,72 @@ describe('RowsBackend', () => {
     expect(distinct).toEqual([{ label: 'paid' }, { label: 'pending' }]);
   });
 
+  it('matches range conditions on non-numeric columns (string/date), not just numbers', async () => {
+    const count = (filters: SemanticPlan['filters']) =>
+      run({
+        select: [{ expr: { kind: 'aggregate', fn: Aggregate.COUNT, column: col('member_id') }, alias: 'data' }],
+        filters,
+      });
+    // Date-string range: rows 2..4 are on/after 2026-01-20.
+    expect(
+      await count([{ kind: 'where', column: col('created_at'), condition: { gte: '2026-01-20T00:00:00Z' } }]),
+    ).toEqual([{ data: 3 }]);
+    // String range: status >= 'p' matches 'paid' and 'pending', not empty.
+    expect(await count([{ kind: 'where', column: col('status'), condition: { gte: 'p' } }])).toEqual([
+      { data: 4 },
+    ]);
+  });
+
+  it('an empty range condition matches every row, including rows with null values in that column', async () => {
+    const withNull = [...rows, { created_at: '2026-04-01T00:00:00Z', amount: 400, status: null, member_id: null }];
+    const out = await run(
+      {
+        select: [{ expr: { kind: 'aggregate', fn: Aggregate.COUNT, column: col('member_id') }, alias: 'data' }],
+        filters: [{ kind: 'where', column: col('status'), condition: {} }],
+      },
+      withNull,
+    );
+    // COUNT ignores nulls itself, but all 5 rows must pass the empty-range filter.
+    expect(out).toEqual([{ data: 4 }]);
+    // Distinct labels over the full set (including the null row) must include
+    // all 3 distinct status representations — proving the null row wasn't
+    // silently excluded by the empty-range filter.
+    const passed = await run(
+      {
+        select: [{ expr: { kind: 'column', column: col('status') }, alias: 'label' }],
+        filters: [{ kind: 'where', column: col('status'), condition: {} }],
+        distinct: true,
+      },
+      withNull,
+    );
+    expect(passed).toEqual([{ label: 'null' }, { label: 'paid' }, { label: 'pending' }]);
+  });
+
+  it('MAX/MIN over a string/date column return the real extreme value, not 0', async () => {
+    const out = await run({
+      select: [
+        { expr: { kind: 'aggregate', fn: Aggregate.MAX, column: col('status') }, alias: 'maxStatus' },
+        { expr: { kind: 'aggregate', fn: Aggregate.MIN, column: col('status') }, alias: 'minStatus' },
+      ],
+      filters: [],
+    });
+    expect(out).toEqual([{ maxStatus: 'pending', minStatus: 'paid' }]);
+
+    const dateRows = [
+      { d: '2026-01-05T00:00:00Z' },
+      { d: '2026-03-01T00:00:00Z' },
+      { d: '2026-02-10T00:00:00Z' },
+    ];
+    const dateOut = await run(
+      {
+        select: [{ expr: { kind: 'aggregate', fn: Aggregate.MAX, column: col('d') }, alias: 'maxDate' }],
+        filters: [],
+      },
+      dateRows,
+    );
+    expect(dateOut).toEqual([{ maxDate: '2026-03-01T00:00:00Z' }]);
+  });
+
   it('fails fast on an unparseable date, naming the row index', async () => {
     const bad = [{ created_at: 'not-a-date', amount: 1 }];
     await expect(

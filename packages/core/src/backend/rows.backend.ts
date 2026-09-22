@@ -19,11 +19,6 @@ type SourceRow = Record<string, unknown>;
 export class RowsBackend implements QueryBackend {
   constructor(private readonly rows: SourceRow[]) {}
 
-  /** Identifiers are never rendered into SQL in rows mode. */
-  escapeId(name: string): string {
-    return name;
-  }
-
   async run(plan: SemanticPlan): Promise<Row[]> {
     const zone = plan.tz ?? 'UTC';
     const kept: Array<[SourceRow, number]> = this.rows
@@ -168,7 +163,7 @@ export class RowsBackend implements QueryBackend {
     }
   }
 
-  private evalAggregate(expr: SelectExpr, rows: SourceRow[]): number {
+  private evalAggregate(expr: SelectExpr, rows: SourceRow[]): number | string {
     if (expr.kind === 'aggregate') {
       return aggregate(expr.fn, rows.map((row) => row[expr.column.column]));
     }
@@ -183,10 +178,24 @@ export class RowsBackend implements QueryBackend {
 }
 
 /** SQL-style aggregate over raw values; nulls/undefined are ignored like SQL. */
-function aggregate(fn: Aggregate, values: unknown[]): number {
+function aggregate(fn: Aggregate, values: unknown[]): number | string {
   const present = values.filter((value) => value !== null && value !== undefined);
   if (fn === Aggregate.COUNT) {
     return present.length;
+  }
+  if (fn === Aggregate.MAX || fn === Aggregate.MIN) {
+    if (present.length === 0) {
+      return 0;
+    }
+    // Like SQL: compare numerically only when every value is genuinely
+    // numeric; otherwise fall back to native (string/date) comparison so
+    // MAX/MIN over non-numeric columns returns the real extreme, not 0.
+    if (present.every(isNumericLike)) {
+      const nums = present.map(Number);
+      return fn === Aggregate.MAX ? Math.max(...nums) : Math.min(...nums);
+    }
+    const strs = present.map(String).sort();
+    return fn === Aggregate.MAX ? strs[strs.length - 1] : strs[0];
   }
   const nums = present.map(Number).filter((n) => !Number.isNaN(n));
   if (nums.length === 0) {
@@ -197,13 +206,34 @@ function aggregate(fn: Aggregate, values: unknown[]): number {
       return nums.reduce((a, b) => a + b, 0);
     case Aggregate.AVERAGE:
       return nums.reduce((a, b) => a + b, 0) / nums.length;
-    case Aggregate.MAX:
-      return Math.max(...nums);
-    case Aggregate.MIN:
-      return Math.min(...nums);
     default:
       return 0;
   }
+}
+
+/** True when a value is a finite number, or a non-empty string that parses as one. */
+function isNumericLike(value: unknown): boolean {
+  if (typeof value === 'number') {
+    return Number.isFinite(value);
+  }
+  if (typeof value === 'string') {
+    return value.trim() !== '' && Number.isFinite(Number(value));
+  }
+  return false;
+}
+
+/**
+ * Compare two range-condition operands the way SQL would: numerically when
+ * both sides are genuinely numeric, otherwise as strings (covers ISO date
+ * strings and text columns like SQL's native `>=`/`<=`).
+ */
+function compareRangeValues(a: unknown, b: unknown): number {
+  if (isNumericLike(a) && isNumericLike(b)) {
+    return Number(a) - Number(b);
+  }
+  const as = String(a);
+  const bs = String(b);
+  return as < bs ? -1 : as > bs ? 1 : 0;
 }
 
 /** SQL-style loose equality: 1 matches '1' (drivers return both). */
@@ -224,14 +254,23 @@ function matchCondition(value: unknown, condition: WhereCondition): boolean {
   }
   if (typeof condition === 'object') {
     const range = condition as RangeCondition;
-    const n = Number(value);
-    if (value === null || value === undefined || Number.isNaN(n)) {
+    if (
+      range.gte === undefined &&
+      range.lte === undefined &&
+      range.gt === undefined &&
+      range.lt === undefined
+    ) {
+      // Empty range object: no WHERE fragment in SQL, so it matches everything.
+      return true;
+    }
+    if (value === null || value === undefined) {
+      // SQL: `NULL >= x` (and friends) is never true.
       return false;
     }
-    if (range.gte !== undefined && !(n >= Number(range.gte))) return false;
-    if (range.lte !== undefined && !(n <= Number(range.lte))) return false;
-    if (range.gt !== undefined && !(n > Number(range.gt))) return false;
-    if (range.lt !== undefined && !(n < Number(range.lt))) return false;
+    if (range.gte !== undefined && !(compareRangeValues(value, range.gte) >= 0)) return false;
+    if (range.lte !== undefined && !(compareRangeValues(value, range.lte) <= 0)) return false;
+    if (range.gt !== undefined && !(compareRangeValues(value, range.gt) > 0)) return false;
+    if (range.lt !== undefined && !(compareRangeValues(value, range.lt) < 0)) return false;
     return true;
   }
   return looseEquals(value, condition);
