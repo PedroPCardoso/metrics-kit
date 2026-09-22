@@ -52,10 +52,13 @@
 npm install nestjs-metrics
 ```
 
-Peer dependencies (must already be in your project):
+Peer dependencies — both **optional**, install what you actually use:
 
-- `@nestjs/common` ^10 || ^11
-- `typeorm` ^0.3
+- `@nestjs/common` ^10 || ^11 — only for the `nestjs-metrics/nestjs` module/service.
+- `typeorm` ^0.3 — only for the `Metrics.query(qb)` / `metricsFor` / `withMetrics`
+  paths. Nothing in the package imports it at runtime; it is a type-only reference,
+  so a non-TypeORM stack can install without it and use
+  [`queryExecutor`](#executor-mode-queryexecutor) or [`fromRows`](#in-memory-rows-fromrows).
 - `nestjs-metrics-core` (installed automatically)
 
 ---
@@ -1015,6 +1018,9 @@ modes by a dedicated equivalence test suite in the library itself.
   there is no table to redirect to and no SQL to preview.
 - **Unparseable dates fail fast.** A row whose date column can't be parsed throws
   `InvalidRowDateException`, naming the row's index in the input array.
+- **Aggregation happens in memory.** Every row you pass is held and iterated in the
+  Node process — there is no `GROUP BY` pushed to the database. See the sizing note
+  below.
 
 ```typescript
 import { InvalidRowDateException, UnsupportedInRowsModeException } from 'nestjs-metrics-core';
@@ -1027,6 +1033,40 @@ try {
   }
 }
 ```
+
+### Sizing: when to go back to SQL aggregation
+
+`fromRows()` trades database work for memory. Every row crosses the wire and is
+held in the Node process while the series is built, so cost scales with the number
+of rows **fetched**, not with the number of buckets returned. A few thousand rows
+is irrelevant; a report that sweeps hundreds of thousands of rows to produce twelve
+monthly points is paying for all of them.
+
+A useful rule: if the query would return more rows than you'd be comfortable holding
+in an array, that specific indicator belongs in SQL aggregation
+(`query()`/`queryExecutor()`, where `GROUP BY` runs in the database and only the
+buckets come back). The two modes coexist — it's a per-indicator decision, not a
+per-project one.
+
+### Choosing between `fromRows()` and `.where()`/`.whereIn()` for scoped reads
+
+Both can enforce a visibility scope, and they put the library in different places
+relative to your security boundary:
+
+- **`fromRows()` keeps the library outside it.** Your own query layer decides which
+  rows the caller may see; the library only does arithmetic over rows already
+  approved. A bug in the library produces a wrong chart.
+- **`.where()`/`.whereIn()` brings the library inside it.** The scope is expressed
+  as a filter the library compiles into SQL. A bug on that path is a data leak
+  rather than a wrong number — which is why the empty-list case
+  ([fails closed](#chainable-where--wherein)) matters so much there.
+
+Neither is wrong. If you already have a gated query layer (a scoped repository, a
+row-level-security view, a `ScopedQuery` helper), `fromRows()` lets you keep that
+gate as the single enforcement point and avoids duplicating scope logic in two
+places. If you don't, or if volume rules out loading rows, `.where()`/`.whereIn()`
+is the supported path — just keep the scope values developer-controlled and let the
+fail-closed empty list do its job.
 
 ---
 
@@ -1209,7 +1249,12 @@ const result = await repo
 ## SQL Introspection (toSql / toTrendsSql)
 
 `toSql()` and `toTrendsSql()` render the SQL that would be executed — useful for
-debugging, logging, or building query-plan tests.
+interactive debugging and for building query-plan tests.
+
+> ⚠️ **Never log the unmasked output.** By default, bound values are interpolated
+> into the returned string, so a scoped query leaks its scope:
+> `.whereIn('member_id', ids)` renders as `IN ('a','b','c')`. Anything that reaches
+> a log, an error report or an APM span must use `{ mask: true }` (below).
 
 ```typescript
 const sql = Metrics.query(qb)
@@ -1226,12 +1271,16 @@ const trendsSql = Metrics.query(qb)
 
 ### Masking values
 
-Pass `{ mask: true }` to redact bound parameter values (safe for production logs):
+Pass `{ mask: true }` to redact bound parameter values. This is the form to use
+anywhere the string is persisted or shipped off-process:
 
 ```typescript
 const sql = builder.toSql({ mask: true });
 // → ... WHERE created_at >= '[REDACTED]' AND created_at < '[REDACTED]'
 ```
+
+Numbers redact to `0` and everything else to `'[REDACTED]'`, so the query shape
+stays readable while the values don't travel.
 
 ---
 

@@ -935,6 +935,12 @@ export class MetricsBuilder<T extends ObjectLiteral> {
    * without actually running it. Parameter values are shown inline; pass
    * `{ mask: true }` to redact them with `'[REDACTED]'`.
    *
+   * ⚠️ **Never log the unmasked output.** Bound values are interpolated into the
+   * returned string, so a scoped query leaks its scope: `.whereIn('member_id', ids)`
+   * renders as `IN ('a','b','c')`. Use `{ mask: true }` for anything that reaches a
+   * log, an error report, or an APM span; keep the unmasked form for interactive
+   * debugging only.
+   *
    * @param options - When `mask` is true parameter values are redacted.
    * @returns The rendered SQL with bound parameter values.
    * @throws {@link UnsupportedInRowsModeException} in {@link fromRows} mode, where there is no SQL.
@@ -947,6 +953,12 @@ export class MetricsBuilder<T extends ObjectLiteral> {
    * Return the SQL string the {@link trends} terminal method would execute,
    * without actually running it. Parameter values are shown inline; pass
    * `{ mask: true }` to redact them with `'[REDACTED]'`.
+   *
+   * ⚠️ **Never log the unmasked output.** Bound values are interpolated into the
+   * returned string, so a scoped query leaks its scope: `.whereIn('member_id', ids)`
+   * renders as `IN ('a','b','c')`. Use `{ mask: true }` for anything that reaches a
+   * log, an error report, or an APM span; keep the unmasked form for interactive
+   * debugging only.
    *
    * @param options - When `mask` is true parameter values are redacted.
    * @returns The rendered SQL with bound parameter values.
