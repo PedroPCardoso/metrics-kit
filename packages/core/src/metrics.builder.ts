@@ -561,9 +561,12 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     if (this.missingLabels.length > 0) {
       return this.missingLabels;
     }
+    // Only the where/whereIn scoping filters apply here (not the period filters):
+    // the canonical label set must respect .where()/.whereIn() visibility scoping,
+    // but should still span the full configured period range for gap-filling.
     const plan: SemanticPlan = {
       select: [{ expr: { kind: 'column', column: this.labelColumnRef as ColumnRef }, alias: 'label' }],
-      filters: [],
+      filters: this.extraWhere.map((w) => ({ kind: 'where' as const, ...w })),
       distinct: true,
       orderByLabel: 'ASC',
     };

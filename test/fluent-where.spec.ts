@@ -54,4 +54,20 @@ describe('fluent where / whereIn', () => {
       .metricsWithVariations(1, Period.MONTH);
     expect(result.count).toBe(1);
   });
+
+  it('labelColumn + fillMissingData respects whereIn scoping in the canonical label set', async () => {
+    // Out-of-scope statuses ('pending', 'refunded') must not appear in labels
+    // at all — not just have a zero value — proving canonicalLabels() applies
+    // the same where/whereIn scope as the data query, not the full table.
+    const result = await exec()
+      .whereIn('status', ['paid'])
+      .sumByYear('amount', 1)
+      .forYear(2026)
+      .labelColumn('status')
+      .fillMissingData()
+      .trends();
+    expect(result.labels).toEqual(['paid']);
+    expect(result.labels).not.toContain('pending');
+    expect(result.labels).not.toContain('refunded');
+  });
 });
