@@ -61,6 +61,13 @@ this.metrics.fromRows(rowsYouAlreadyFetched, { dateColumn: 'created_at' }).count
 If you don't need the NestJS module at all, depend on
 [`nestjs-metrics-core`](https://www.npmjs.com/package/nestjs-metrics-core) directly.
 
+There is no `nestjs-metrics/prisma` or `nestjs-metrics/kysely` subpath. The driver
+adapters live in [`nextjs-metrics`](https://www.npmjs.com/package/nextjs-metrics)
+(`nextjs-metrics/prisma`, `/drizzle`, `/kysely`) — despite the name, that package
+is **not** Next.js-specific and works in any Node runtime, including NestJS. Each
+adapter is a thin `DataSource` builder, so you can equally skip it and pass your
+own `{ dialect, execute }` to `queryExecutor()`.
+
 ## Quick start
 
 Register the module globally:
