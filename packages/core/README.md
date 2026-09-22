@@ -160,8 +160,10 @@ await Metrics.fromRows(rows, { dateColumn: 'created_at' }, { timezone: 'America/
 ```
 
 `dateColumn` accepts `Date`, ISO strings or epoch milliseconds. The full
-fluent API works (`count/sum/average/max/min`, periods, `between`,
-`labelColumn`, `groupData`, `metricsWithVariations`, `where`/`whereIn`).
+fluent API works (`count/countDistinct/sum/average/max/min`, every period
+including `byHour`, `between`, `labelColumn`, `groupData` (including
+auto-discovered labels), `cumulative`, `metricsWithVariations`,
+`trendsWithComparison`, `where`/`whereIn`).
 An unparseable date throws `InvalidRowDateException` naming the row index;
 `.table()` throws `UnsupportedInRowsModeException`. Caching is not available in
 rows mode — passing `cache: { enabled: true }` to `fromRows()` throws
