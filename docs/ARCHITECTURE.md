@@ -316,7 +316,7 @@ A interface foi extraída quando o 2º backend surgiu, não desenhada especulati
 - **`TypeOrmBackend`** — o caminho original, sobre o `SelectQueryBuilder`, com comportamento e escaping do driver **inalterados**.
 - **`ExecutorBackend`** — monta um SQL cru parametrizado e o executa via um `DataSource` agnóstico `(sql, params) => rows` (Prisma/Drizzle/qualquer driver). Placeholders `:name` viram posicionais (`$n` no Postgres, `?` no MySQL/SQLite); tipos crus do driver passam por `normalize()` no boundary.
 
-`RowsBackend` interpreta o `SemanticPlan` diretamente, sem nunca passar por `renderPlan()`/`QueryPlan` (ver §6.9 para o desenho atual de três backends).
+`RowsBackend` interpreta o `SemanticPlan` diretamente, sem nunca passar por `renderPlan()`/`QueryPlan` (ver §6.9 para o desenho atual das duas implementações de backend).
 
 A `SqlDialect` strategy existe desde o dia 1 (os três dialetos coexistem) e ganhou `escapeId`/`placeholder` para o modo executor.
 
@@ -334,19 +334,19 @@ Carbon `->locale(x)->monthName` → Luxon `DateTime.fromObject({...},{locale}).t
 ### 6.6 Decimais
 SQLite/Postgres podem retornar agregados como string. Normalizar via `Number()`/`parseFloat` no `AggregateRunner`, como o `(float)` do PHP.
 
-### 6.9 SemanticPlan / renderPlan / RowsBackend — arquitetura de três backends
+### 6.9 SemanticPlan / renderPlan / RowsBackend — duas implementações de `QueryBackend`
 
 O builder fluente não emite SQL diretamente; ele constrói um **`SemanticPlan`** (em `backend/semantic-plan.ts`) que captura a intenção semântica da query: período, agregação, colunas, filtros WHERE estruturados, label, groupData — tudo dialeto-agnóstico.
 
-Três backends interpretam o plano:
+Duas implementações de `QueryBackend` interpretam o plano:
 
-1. **`renderPlan()` (em `backend/render-plan.ts`)** — renderiza SQL parametrizado para TypeORM e Executor (Postgres, MySQL, SQLite). Saída: string SQL cru + mapa de parâmetros `:name`. SQL é **snapshot-locked**: qualquer mudança de output é capturada por snapshots de teste.
+1. **Backends SQL (`TypeOrmBackend`, `ExecutorBackend`)** — ambos chamam a função compartilhada **`renderPlan()`** (em `backend/render-plan.ts`) para renderizar SQL parametrizado (Postgres, MySQL, SQLite). Saída: string SQL cru + mapa de parâmetros `:name`. SQL é **snapshot-locked**: qualquer mudança de output é capturada por snapshots de teste.
 
-2. **`RowsBackend` (em `backend/rows.backend.ts`)** — interpreta o plano **em memória**, sobre um array de objetos: itera as linhas, aplica filtros WHERE, extrai períodos com `luxon.DateTime` (timezone-aware, DST-correto), agrega com `reduce()`, preenche lacunas no calendário, formata labels. **Equivalência-testada**: a suíte equivalence-test (Task 6) roda o mesmo plano nos três backends e valida que as saídas numéricas/labels são idênticas.
+2. **`RowsBackend` (em `backend/rows.backend.ts`)** — interpreta o plano **em memória**, sobre um array de objetos: itera as linhas, aplica filtros WHERE, extrai períodos com `luxon.DateTime` (timezone-aware, DST-correto), agrega com `reduce()`. O preenchimento de lacunas no calendário e a formatação de labels **não** são responsabilidade de nenhum backend individual — vivem no builder (`MetricsBuilder`) e no `TrendsFormatter`, camada compartilhada acima da costura de backend, acionada igualmente para SQL e para rows. **Equivalência-testada**: a suíte equivalence-test (`test/rows-equivalence.spec.ts`) roda o mesmo plano no modo executor (SQLite via `ExecutorBackend`) e no modo `fromRows` (`RowsBackend`) e valida que as saídas numéricas/labels são idênticas.
 
-A invariante de qualidade: SQL é imutável (snapshot-locked); RowsBackend é equivalência-trancado aos SQL backends (nenhum dos dois pode divergir sem falha).
+A invariante de qualidade: SQL é imutável (snapshot-locked); RowsBackend é equivalência-trancado ao backend SQL comparado (nenhum dos dois pode divergir sem falha).
 
-`fromRows()` instancia `RowsBackend` direto; `query()` e `queryExecutor()` instanciam `renderPlan()` e delegam ao driver.
+`fromRows()` instancia `RowsBackend` diretamente; `query()` e `queryExecutor()` instanciam `TypeOrmBackend`/`ExecutorBackend`, que por sua vez chamam `renderPlan()` internamente e delegam ao driver.
 
 ---
 
