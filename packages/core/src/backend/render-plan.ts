@@ -1,5 +1,5 @@
 import { SqlDialect } from '../dialects/sql-dialect.interface';
-import { WhereInput } from '../where';
+import { compileWhereEntries, WhereCondition, WhereInput } from '../where';
 import { ColumnRef, SelectExpr, SemanticPlan } from './semantic-plan';
 import { QueryPlan, SelectItem } from './query-plan';
 
@@ -98,44 +98,17 @@ export function renderPlan(
 
 /**
  * compileWhere() takes a Record and can't repeat columns or carry per-entry
- * tables; this ordered variant reuses its fragment grammar 1:1 (same nm_w
- * numbering starting at 0) over an entry list.
+ * tables; this ordered variant adapts an entry list into the shared
+ * `compileWhereEntries` grammar (same nm_w numbering starting at 0), so both
+ * variants compile through one implementation.
  */
 function compileWhereOrdered(
   entries: [ColumnRef, WhereInput[string]][],
   qualify: (ref: ColumnRef) => string,
 ): { fragments: string[]; params: Record<string, unknown> } {
-  const fragments: string[] = [];
-  const params: Record<string, unknown> = {};
-  let next = 0;
-  const bind = (value: unknown): string => {
-    const key = `nm_w${next++}`;
-    params[key] = value;
-    return `:${key}`;
-  };
-  const RANGE_OPS: ['gte' | 'lte' | 'gt' | 'lt', string][] = [
-    ['gte', '>='],
-    ['lte', '<='],
-    ['gt', '>'],
-    ['lt', '<'],
-  ];
-  for (const [ref, condition] of entries) {
-    const col = qualify(ref);
-    if (condition === null) {
-      fragments.push(`${col} IS NULL`);
-    } else if (Array.isArray(condition)) {
-      fragments.push(
-        condition.length === 0 ? '1 = 0' : `${col} IN (${condition.map(bind).join(', ')})`,
-      );
-    } else if (typeof condition === 'object') {
-      for (const [op, sql] of RANGE_OPS) {
-        if (condition[op] !== undefined) {
-          fragments.push(`${col} ${sql} ${bind(condition[op])}`);
-        }
-      }
-    } else {
-      fragments.push(`${col} = ${bind(condition)}`);
-    }
-  }
-  return { fragments, params };
+  const qualified: [string, WhereCondition][] = entries.map(([ref, condition]) => [
+    qualify(ref),
+    condition,
+  ]);
+  return compileWhereEntries(qualified);
 }

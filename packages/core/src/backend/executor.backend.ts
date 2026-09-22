@@ -28,10 +28,6 @@ export class ExecutorBackend implements QueryBackend {
     this.dialect = dialectFor(dataSource.dialect);
   }
 
-  escapeId(name: string): string {
-    return this.dialect.escapeId(name);
-  }
-
   async run(plan: SemanticPlan): Promise<Row[]> {
     if (plan.tz && this.dataSource.dialect === 'sqlite') {
       throw new SqliteTimezoneUnsupportedException(plan.tz);

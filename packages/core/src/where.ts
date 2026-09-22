@@ -28,11 +28,15 @@ const RANGE_OPS: [keyof RangeCondition, string][] = [
 ];
 
 /**
- * Compile a structured where map into SQL fragments + bound parameters. Column
- * names are qualified through `qualify` (which validates + escapes them — the
- * injection choke point); every value flows only as a `:param`.
+ * Shared compilation grammar: a list of already-qualified column labels paired
+ * with their condition, compiled into SQL fragments + bound parameters (one
+ * `nm_w*` counter across the whole entry list). Both `compileWhere` (keyed by
+ * plain column name) and `render-plan.ts`'s `compileWhereOrdered` (keyed by
+ * per-entry `ColumnRef`, so a column can repeat with a different table) adapt
+ * their input into this shape and call it, so there is exactly one
+ * implementation of the null/array/range/scalar grammar.
  */
-export function compileWhere(where: WhereInput, qualify: (column: string) => string): CompiledWhere {
+export function compileWhereEntries(entries: [string, WhereCondition][]): CompiledWhere {
   const fragments: string[] = [];
   const params: Record<string, unknown> = {};
   let next = 0;
@@ -42,9 +46,7 @@ export function compileWhere(where: WhereInput, qualify: (column: string) => str
     return `:${key}`;
   };
 
-  for (const [column, condition] of Object.entries(where)) {
-    const col = qualify(column);
-
+  for (const [col, condition] of entries) {
     if (condition === null) {
       fragments.push(`${col} IS NULL`);
     } else if (Array.isArray(condition)) {
@@ -65,6 +67,19 @@ export function compileWhere(where: WhereInput, qualify: (column: string) => str
   }
 
   return { fragments, params };
+}
+
+/**
+ * Compile a structured where map into SQL fragments + bound parameters. Column
+ * names are qualified through `qualify` (which validates + escapes them — the
+ * injection choke point); every value flows only as a `:param`.
+ */
+export function compileWhere(where: WhereInput, qualify: (column: string) => string): CompiledWhere {
+  const entries: [string, WhereCondition][] = Object.entries(where).map(([column, condition]) => [
+    qualify(column),
+    condition,
+  ]);
+  return compileWhereEntries(entries);
 }
 
 function isRange(condition: WhereCondition): condition is RangeCondition {

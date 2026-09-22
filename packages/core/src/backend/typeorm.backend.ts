@@ -19,10 +19,6 @@ export class TypeOrmBackend<T extends ObjectLiteral> implements QueryBackend {
     this.dialect = dialectFor(qb.connection.options.type);
   }
 
-  escapeId(name: string): string {
-    return this.qb.connection.driver.escape(name);
-  }
-
   async run(plan: SemanticPlan): Promise<Row[]> {
     const rendered = renderPlan(plan, this.dialect, (name) => this.qb.connection.driver.escape(name));
     const q = this.qb.clone();
