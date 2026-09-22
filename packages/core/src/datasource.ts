@@ -31,3 +31,9 @@ export interface ExecutorSpec {
   /** Raw SQL FROM fragment (trusted developer surface) — replaces `table`. */
   from?: string;
 }
+
+/** Spec for the in-memory rows entry point (MetricsBuilder.fromRows). */
+export interface RowsSpec {
+  /** The row property holding the bucketing date. Default: 'created_at'. */
+  dateColumn?: string;
+}

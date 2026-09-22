@@ -4,6 +4,7 @@ import { Aggregate } from './enums/aggregate.enum';
 import { Period } from './enums/period.enum';
 import { InvalidPeriodException } from './exceptions/invalid-period.exception';
 import { InvalidVariationsCountException } from './exceptions/invalid-variations-count.exception';
+import { UnsupportedInRowsModeException } from './exceptions/unsupported-in-rows-mode.exception';
 import { assertAggregate, assertDateFormat, assertSafeIdentifier, assertTimezone } from './validation';
 import { dialectFor } from './dialects/dialect.factory';
 import { DatePart } from './dialects/sql-dialect.interface';
@@ -11,7 +12,8 @@ import { QueryBackend } from './backend/query-backend.interface';
 import { ColumnRef, Filter, SelectExpr, SemanticPlan } from './backend/semantic-plan';
 import { TypeOrmBackend } from './backend/typeorm.backend';
 import { ExecutorBackend } from './backend/executor.backend';
-import { DataSource, ExecutorSpec } from './datasource';
+import { RowsBackend } from './backend/rows.backend';
+import { DataSource, ExecutorSpec, RowsSpec } from './datasource';
 import { WhereCondition, WhereInput, WhereScalar } from './where';
 import { normalizeData, normalizeLabel } from './formatting/normalize';
 import { PeriodResolver } from './dates/period-resolver';
@@ -59,6 +61,8 @@ export class MetricsBuilder<T extends ObjectLiteral> {
   private groupedLabels: (string | number)[] = [];
   private groupedAggregate: Aggregate = Aggregate.SUM;
   private now = new Date();
+  /** Set by fromRows(); gates SQL-only settings like table(). */
+  private rowsMode = false;
   private year: number = this.now.getFullYear();
   private month: number = this.now.getMonth() + 1;
   private day: number = this.now.getDate();
@@ -106,6 +110,7 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     clone.dateColumnName = this.dateColumnName;
     clone.tableName = this.tableName;
     clone.extraWhere = [...this.extraWhere];
+    clone.rowsMode = this.rowsMode;
     return clone;
   }
 
@@ -146,6 +151,24 @@ export class MetricsBuilder<T extends ObjectLiteral> {
     }
   }
 
+  /**
+   * Entry point over pre-fetched rows: the caller owns 100% of the SQL (e.g. a
+   * scoped/visibility-gated query); the builder does the bucketing, gap fill,
+   * timezone handling and labels. Full API parity with the SQL modes.
+   */
+  static fromRows(
+    rows: Record<string, unknown>[],
+    spec: RowsSpec = {},
+    options?: MetricsOptions,
+  ): MetricsBuilder<ObjectLiteral> {
+    const builder = new MetricsBuilder<ObjectLiteral>(new RowsBackend(rows), 'rows', options);
+    builder.rowsMode = true;
+    if (spec.dateColumn) {
+      builder.dateColumn(spec.dateColumn);
+    }
+    return builder;
+  }
+
   // --- Aggregates ---------------------------------------------------------
 
   private aggregate(fn: Aggregate, column: string): this {
@@ -169,6 +192,9 @@ export class MetricsBuilder<T extends ObjectLiteral> {
 
   /** Override the table used to qualify subsequent columns (e.g. a joined table). */
   table(name: string): this {
+    if (this.rowsMode) {
+      throw new UnsupportedInRowsModeException('table');
+    }
     // Stored raw-but-validated; captured per-column each time ref() runs.
     assertSafeIdentifier(name);
     this.tableName = name;
