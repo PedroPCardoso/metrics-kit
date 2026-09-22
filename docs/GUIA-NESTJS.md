@@ -33,7 +33,9 @@
 - [Locale / Label Translation](#locale--label-translation)
 - [Cache](#cache)
 - [Executor Mode (queryExecutor)](#executor-mode-queryexecutor)
+- [In-Memory Rows (fromRows)](#in-memory-rows-fromrows)
 - [Structured Filters (WhereInput)](#structured-filters-whereinput)
+  - [Chainable `.where()` / `.whereIn()`](#chainable-where--wherein)
 - [Validation / SkipValidation](#validation--skipvalidation)
 - [Error Hierarchy](#error-hierarchy)
 - [Repository Helpers (metricsFor / withMetrics)](#repository-helpers-metricsfor--withmetrics)
@@ -207,6 +209,24 @@ const ds: DataSource = {
 
 const result = await MetricsBuilder
   .queryExecutor(ds, { table: 'orders', dateColumn: 'created_at' })
+  .sumByMonth('amount')
+  .trends();
+```
+
+### 6. Via `MetricsBuilder.fromRows()` (in-memory rows, no SQL)
+
+For query layers that already own 100% of the SQL (Kysely, a scoped/visibility-gated
+repository, raw `pg`/`mysql2` calls), hand the builder the rows it should aggregate
+instead of a database connection. The full fluent API works identically — see
+[In-Memory Rows (fromRows)](#in-memory-rows-fromrows) below.
+
+```typescript
+import { MetricsBuilder } from 'nestjs-metrics-core';
+
+const rows = await scopedQuery.selectFrom('orders').selectAll().execute();
+
+const result = await MetricsBuilder
+  .fromRows(rows, { dateColumn: 'created_at' })
   .sumByMonth('amount')
   .trends();
 ```
@@ -943,6 +963,73 @@ interface ExecutorSpec {
 
 ---
 
+## In-Memory Rows (fromRows)
+
+Used when your query layer already owns 100% of the SQL — a Kysely query, a raw
+`pg`/`mysql2` call, or an architecture rule that every read goes through a scoped
+repository. `fromRows()` skips the database entirely: hand it the rows, and it does
+the bucketing, gap fill, timezone-correct boundaries, labels and comparisons — the
+same builder, the same output shape, as every other entry point.
+
+### Basic example
+
+```typescript
+import { MetricsBuilder } from 'nestjs-metrics-core';
+
+const rows = await scopedQuery.selectFrom('orders').selectAll().execute();
+
+const result = await MetricsBuilder
+  .fromRows(rows, { dateColumn: 'created_at' }, { timezone: 'America/Sao_Paulo' })
+  .sumByMonth('amount')
+  .forYear(2026)
+  .fillMissingData()
+  .trends(); // identical output to query()/queryExecutor() for the same data
+```
+
+### RowsSpec
+
+```typescript
+interface RowsSpec {
+  dateColumn?: string; // Row property to bucket on (default 'created_at')
+}
+```
+
+`dateColumn` accepts a `Date`, an ISO string, or an epoch millisecond number on each
+row.
+
+### Full API parity
+
+Every aggregator, period, range, modifier and terminal method documented in this
+guide works identically in rows mode: `count`/`countDistinct`/`sum`/`average`/`max`/`min`,
+every period shorthand including `byHour`, `between`/`from`, `labelColumn`,
+`groupData` (including auto-discovered labels), `cumulative`, `fillMissingData`,
+`metricsWithVariations`, `trendsWithComparison`, and the chainable
+`.where()`/`.whereIn()` filters below. Output is verified identical to the SQL
+modes by a dedicated equivalence test suite in the library itself.
+
+### What's different in rows mode
+
+- **No caching.** `options.cache.enabled` throws `ConfigurationError` — in-memory
+  rows have no stable query identity to key a cache entry on.
+- **No `.table()` or `.toSql()`.** Both throw `UnsupportedInRowsModeException` —
+  there is no table to redirect to and no SQL to preview.
+- **Unparseable dates fail fast.** A row whose date column can't be parsed throws
+  `InvalidRowDateException`, naming the row's index in the input array.
+
+```typescript
+import { InvalidRowDateException, UnsupportedInRowsModeException } from 'nestjs-metrics-core';
+
+try {
+  await MetricsBuilder.fromRows(rows).sumByMonth('amount').trends();
+} catch (err) {
+  if (err instanceof InvalidRowDateException) {
+    // err.context.operation === 'fromRows'
+  }
+}
+```
+
+---
+
 ## Structured Filters (WhereInput)
 
 Available in executor mode via `ExecutorSpec.where`. Filters are **AND** and
@@ -1003,6 +1090,27 @@ const result = await MetricsBuilder
 
 The `where` filters are applied **along with** period/range filters.
 
+### Chainable `.where()` / `.whereIn()`
+
+The same structured filters are also available as chainable builder methods — in
+`query()`/TypeORM mode, `queryExecutor()`, and `fromRows()` alike. This is the hook
+for multi-tenant or visibility-gated scoping: wrap the builder and inject the
+caller's visible ids before any aggregate/period method runs.
+
+```typescript
+const scoped = Metrics.query(orderRepo.createQueryBuilder('orders'))
+  .whereIn('member_id', visibleIds)   // array → IN (…), every value bound
+  .where('status', 'confirmed')       // scalar → equality
+  .where('amount', { gte: 0 });       // object → range (gte/lte/gt/lt); null → IS NULL
+
+await scoped.sumByMonth('amount', 12).fillMissingData().trends();
+```
+
+Multiple `.where()`/`.whereIn()` calls **AND** together. Values only ever travel as
+bound parameters; column names are validated and driver-escaped. An **empty
+`whereIn([])` matches nothing** (fails closed) — the same guarantee as the
+`ExecutorSpec.where` object form above.
+
 ---
 
 ## Validation / SkipValidation
@@ -1048,7 +1156,9 @@ Error
      ├─ InvalidTimezoneException           INVALID_TIMEZONE
      ├─ SqliteTimezoneUnsupportedException SQLITE_TIMEZONE_UNSUPPORTED
      ├─ ConfigurationError                 CONFIGURATION_ERROR
-     └─ QueryExecutionError               QUERY_EXECUTION_ERROR
+     ├─ QueryExecutionError                QUERY_EXECUTION_ERROR
+     ├─ InvalidRowDateException             INVALID_ROW_DATE
+     └─ UnsupportedInRowsModeException      UNSUPPORTED_IN_ROWS_MODE
 ```
 
 ### Catching errors
@@ -1189,6 +1299,8 @@ const data = toRecharts(grouped);
 | `SqliteTimezoneUnsupportedException` | `SQLITE_TIMEZONE_UNSUPPORTED` | Non-UTC timezone in SQLite executor               |
 | `ConfigurationError`                 | `CONFIGURATION_ERROR`         | Unsupported driver / dialect not inferred         |
 | `QueryExecutionError`                | `QUERY_EXECUTION_ERROR`       | Driver error during SQL execution                 |
+| `InvalidRowDateException`            | `INVALID_ROW_DATE`            | `fromRows()` row has an unparseable date column   |
+| `UnsupportedInRowsModeException`     | `UNSUPPORTED_IN_ROWS_MODE`    | `.table()`/`.toSql()` called on a `fromRows()` builder |
 
 ---
 
