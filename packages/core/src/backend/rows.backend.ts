@@ -26,23 +26,23 @@ export class RowsBackend implements QueryBackend {
 
   async run(plan: SemanticPlan): Promise<Row[]> {
     const zone = plan.tz ?? 'UTC';
-    const kept = this.rows.filter((row, index) =>
-      plan.filters.every((filter) => this.matches(filter, row, index, zone)),
-    );
+    const kept: Array<[SourceRow, number]> = this.rows
+      .map((row, index): [SourceRow, number] => [row, index])
+      .filter(([row, index]) => plan.filters.every((filter) => this.matches(filter, row, index, zone)));
 
     const labelItem = plan.select.find((item) => item.alias === 'label');
 
     if (plan.distinct && labelItem) {
       const values = new Set<string | number>();
-      kept.forEach((row, i) => values.add(this.evalLabel(labelItem.expr, row, i, zone)));
+      kept.forEach(([row, index]) => values.add(this.evalLabel(labelItem.expr, row, index, zone)));
       const sorted = [...values].sort(compareLabels);
       return sorted.map((label) => ({ label }));
     }
 
     const groups = new Map<string | number, SourceRow[]>();
     if (labelItem && plan.groupByLabel) {
-      kept.forEach((row, i) => {
-        const label = this.evalLabel(labelItem.expr, row, i, zone);
+      kept.forEach(([row, index]) => {
+        const label = this.evalLabel(labelItem.expr, row, index, zone);
         const bucket = groups.get(label);
         if (bucket) {
           bucket.push(row);
@@ -51,7 +51,10 @@ export class RowsBackend implements QueryBackend {
         }
       });
     } else {
-      groups.set('', kept);
+      groups.set(
+        '',
+        kept.map(([row]) => row),
+      );
     }
 
     const entries = [...groups.entries()];

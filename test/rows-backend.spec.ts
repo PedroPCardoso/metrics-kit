@@ -103,4 +103,21 @@ describe('RowsBackend', () => {
       }, bad),
     ).rejects.toThrow(InvalidRowDateException);
   });
+
+  it('reports the original row index (not the post-filter position) when a later row has an unparseable date', async () => {
+    const bad = [
+      { status: 'other', created_at: '2026-01-01T00:00:00Z' },
+      { status: 'y', created_at: 'not-a-date' },
+    ];
+    await expect(
+      run(
+        {
+          select: [{ expr: { kind: 'period', part: 'month', date: col('created_at') }, alias: 'label' }],
+          filters: [{ kind: 'where', column: col('status'), condition: 'y' }],
+          groupByLabel: true,
+        },
+        bad,
+      ),
+    ).rejects.toThrow('row 1 has an unparseable date value');
+  });
 });
