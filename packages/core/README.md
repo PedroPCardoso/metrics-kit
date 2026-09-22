@@ -196,8 +196,12 @@ See the [error codes reference](https://github.com/PedroPCardoso/metrics-kit/blo
 
 ## Adapters
 
-- **NestJS + TypeORM** — [`nestjs-metrics`](https://github.com/PedroPCardoso/metrics-kit/tree/master/packages/nestjs-metrics)
-- **Next.js + Prisma/Drizzle** — [`nextjs-metrics`](https://github.com/PedroPCardoso/metrics-kit/tree/master/packages/nextjs-metrics)
+- **NestJS** — [`nestjs-metrics`](https://github.com/PedroPCardoso/metrics-kit/tree/master/packages/nestjs-metrics): `MetricsModule` + injectable `MetricsService`, with module-wide locale/timezone/cache defaults.
+- **Prisma, Drizzle & Kysely** — [`nextjs-metrics`](https://github.com/PedroPCardoso/metrics-kit/tree/master/packages/nextjs-metrics): `prismaMetrics` / `drizzleMetrics` / `kyselyMetrics`, each on an isolated subpath. Despite the name, it is **not** Next.js-specific — it works in any Node runtime, and the adapters are just thin `DataSource` builders over the core executor mode.
+
+Adapters are optional convenience. Any driver already works through
+`Metrics.queryExecutor(dataSource, …)`, and `Metrics.fromRows(rows, …)` needs no
+driver at all.
 
 ## License
 

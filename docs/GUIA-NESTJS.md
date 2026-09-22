@@ -162,6 +162,22 @@ this.metrics
 > cache setting would otherwise make every rows-mode call throw. Passing `cache`
 > explicitly at the call site still throws `ConfigurationError`.
 
+#### Driver adapters (Prisma, Drizzle, Kysely)
+
+`queryExecutor()` takes any `{ dialect, execute }` pair, so you can wire a driver
+by hand. If you'd rather not, ready-made builders exist — but note they live in a
+**separate package**, and there is no `nestjs-metrics/kysely` subpath:
+
+```typescript
+import { kyselyMetrics } from 'nextjs-metrics/kysely';   // also /prisma, /drizzle
+```
+
+Despite the name, `nextjs-metrics` is not Next.js-specific — it works in any Node
+runtime, NestJS included. The adapters are thin `DataSource` builders over the
+same executor mode, and they bypass `MetricsService`, so module-level
+locale/timezone defaults do **not** apply to them: prefer
+`this.metrics.queryExecutor(...)` when you want the module's configuration.
+
 ### Option precedence (locale/timezone)
 
 **call-site** > **forFeature** > **forRoot** > **default (`'en'`, `'UTC'`)**
